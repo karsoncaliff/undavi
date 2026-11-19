@@ -2,17 +2,18 @@
   <img src="assets/undavi/title.svg" width="220" alt="Undavi">
 </p>
 <p align="center">
-  A music visualizer for your desktop: whatever is playing, as a live spectrum,<br>
+  An audio visualizer for your desktop: whatever is playing, as a live spectrum,<br>
   with the album art, playback controls and time-synced lyrics.
 </p>
 <p align="center">
-  <a href="https://github.com/karsoncaliff/undavi/actions/workflows/ci.yml"><img src="https://github.com/karsoncaliff/undavi/actions/workflows/ci.yml/badge.svg" alt="CI status"></a>
+  <a href="https://github.com/karsoncaliff/undavi/releases/latest"><img src="https://img.shields.io/github/v/release/karsoncaliff/undavi" alt="Latest release"></a>
+  <a href="https://github.com/karsoncaliff/undavi/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/karsoncaliff/undavi/ci.yml?label=CI" alt="CI status"></a>
+  <img src="https://img.shields.io/badge/platform-Linux-blue?logo=linux&logoColor=white" alt="Platform: Linux">
+  <a href="CONTRIBUTING.md#building"><img src="https://img.shields.io/badge/rust-1.90%2B-orange?logo=rust" alt="Rust 1.90+"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/karsoncaliff/undavi" alt="License: GPL-3.0"></a>
 </p>
 
-<!--
-  VIDEO PLACEHOLDER: features look
--->
-
+https://github.com/user-attachments/assets/aaf0d770-fbcc-4a4b-94b2-1f113691ff23
 
 ---
 
@@ -126,8 +127,7 @@ click the source button at the top to pick something else:
 
 Undavi remembers your choice.
 
-<!-- VIDEO PLACEHOLDER: default look -->
-
+https://github.com/user-attachments/assets/05674d5f-cc36-4b51-bfb2-3cb30b21ec6b
 
 The three buttons at the top right open the side panels. Click the Undavi logo
 for the About panel. The controls fade out when the mouse is still and come back
@@ -139,24 +139,21 @@ How the bars react to sound: sensitivity, speed, gravity, the level and
 frequency ranges, EQ, auto-gain, the noise gate, beats and a visual delay. A live
 meter shows what the sliders are working with while the panel is open.
 
-<!-- VIDEO PLACEHOLDER: tuning.mp4 -->
-
+https://github.com/user-attachments/assets/fedd0698-02ad-4055-898b-51e841b00bc9
 
 ### Visuals
 
 How the bars look: bars, a ring around the cover, or a wave; mirroring and
 stereo or mid/side split; segments, peak caps, colors and glow.
 
-<!-- VIDEO PLACEHOLDER: visuals.mp4 -->
-
+https://github.com/user-attachments/assets/44707b18-74da-44a6-a1d7-0af56a35a9f0
 
 ### Appearance
 
 The background, how the current track is shown, lyrics, the accent color and the
 window.
 
-<!-- VIDEO PLACEHOLDER: appearance.mp4 -->
-
+https://github.com/user-attachments/assets/e6c1f41a-5f51-4cd2-b4f2-3570a6738fb6
 
 ### Keyboard shortcuts
 
