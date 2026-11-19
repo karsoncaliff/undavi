@@ -1,0 +1,36 @@
+Undavi
+Copyright (C) 2026 Karson Califf
+
+Undavi is free software: you can redistribute it and/or modify it under the
+terms of the GNU General Public License version 3 as published by the Free
+Software Foundation.
+
+Undavi is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
+A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+You should have received a copy of the license in the LICENSE file.
+
+
+Additional terms (GNU GPL version 3, section 7)
+-----------------------------------------------
+
+The following additional terms apply to all of Undavi.
+
+1. Author attribution (section 7(b)).
+   You must keep this NOTICE file with the source code, and you must preserve
+   the attribution
+
+       Based on Undavi by Karson Califf (https://github.com/karsoncaliff/undavi)
+
+   in the Appropriate Legal Notices (such as an About screen) displayed by any
+   work that contains this material.
+
+2. Origin (section 7(c)).
+   You must not misrepresent the origin of this material, and modified
+   versions must be marked in reasonable ways as different from the original
+   version.
+
+3. Trademarks (section 7(e)).
+   This License does not grant any rights under trademark law to use the name
+   "Undavi" or the Undavi logos. See TRADEMARKS.md for what is and isn't
+   allowed.

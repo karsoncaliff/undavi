@@ -1,0 +1,42 @@
+<svg width="44" height="40" viewBox="0 0 44 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M12 22.6939C17.3506 14.8247 26.0956 36.9021 28.3636 21.9564C29.1429 16.8215 31.2208 18.2688 32 19.2522" stroke-width="2" stroke-linecap="round" stroke="url(#paint0_linear_3_23)"/>
+<mask id="mask0_3_23" style="mask-type:alpha" maskUnits="userSpaceOnUse" x="0" y="0" width="44" height="40">
+<line x1="22" y1="7.28469" x2="22" y2="1.28469" stroke-width="2" stroke-linecap="round" stroke="white"/>
+<line x1="31.8995" y1="11.3852" x2="36.1421" y2="7.14256" stroke-width="2" stroke-linecap="round" stroke="white"/>
+<line x1="36" y1="21.2847" x2="43" y2="21.2847" stroke-width="2" stroke-linecap="round" stroke="white"/>
+<line x1="31.8995" y1="31.1842" x2="35.435" y2="34.7197" stroke-width="2" stroke-linecap="round" stroke="white"/>
+<line x1="22" y1="35.2847" x2="22" y2="38.2847" stroke-width="2" stroke-linecap="round" stroke="white"/>
+<line x1="12.1005" y1="31.1842" x2="8.56497" y2="34.7197" stroke-width="2" stroke-linecap="round" stroke="white"/>
+<line x1="8" y1="21.2847" x2="1" y2="21.2847" stroke-width="2" stroke-linecap="round" stroke="white"/>
+<line x1="12.1005" y1="11.3852" x2="7.85786" y2="7.14255" stroke-width="2" stroke-linecap="round" stroke="white"/>
+<line x1="25.6235" y1="7.76173" x2="27.4352" y2="1.00025" stroke-width="2" stroke-linecap="round" stroke="white"/>
+<line x1="29" y1="9.16034" x2="32.5" y2="3.09816" stroke-width="2" stroke-linecap="round" stroke="white"/>
+<line x1="34.1244" y1="14.2847" x2="38.4545" y2="11.7847" stroke-width="2" stroke-linecap="round" stroke="white"/>
+<line x1="35.523" y1="17.6612" x2="41.3185" y2="16.1083" stroke-width="2" stroke-linecap="round" stroke="white"/>
+<line x1="35.523" y1="24.9082" x2="42.2844" y2="26.7199" stroke-width="2" stroke-linecap="round" stroke="white"/>
+<line x1="34.1244" y1="28.2847" x2="38.4545" y2="30.7847" stroke-width="2" stroke-linecap="round" stroke="white"/>
+<line x1="29" y1="33.409" x2="31" y2="36.8731" stroke-width="2" stroke-linecap="round" stroke="white"/>
+<line x1="25.6235" y1="34.8077" x2="26.6587" y2="38.6714" stroke-width="2" stroke-linecap="round" stroke="white"/>
+<line x1="18.3765" y1="34.8077" x2="17.3413" y2="38.6714" stroke-width="2" stroke-linecap="round" stroke="white"/>
+<line x1="15" y1="33.409" x2="13" y2="36.8731" stroke-width="2" stroke-linecap="round" stroke="white"/>
+<line x1="9.87564" y1="28.2847" x2="5.54552" y2="30.7847" stroke-width="2" stroke-linecap="round" stroke="white"/>
+<line x1="8.47704" y1="24.9082" x2="1.71556" y2="26.7199" stroke-width="2" stroke-linecap="round" stroke="white"/>
+<line x1="8.47704" y1="17.6612" x2="2.68148" y2="16.1083" stroke-width="2" stroke-linecap="round" stroke="white"/>
+<line x1="9.87564" y1="14.2847" x2="5.54552" y2="11.7847" stroke-width="2" stroke-linecap="round" stroke="white"/>
+<line x1="15" y1="9.16034" x2="11.5" y2="3.09816" stroke-width="2" stroke-linecap="round" stroke="white"/>
+<line x1="18.3765" y1="7.76173" x2="16.5648" y2="1.00025" stroke-width="2" stroke-linecap="round" stroke="white"/>
+</mask>
+<g mask="url(#mask0_3_23)">
+<rect width="44" height="39.6716" fill="url(#paint1_linear_3_23)"/>
+</g>
+<defs>
+<linearGradient id="paint0_linear_3_23" x1="21.0476" y1="18.2847" x2="22.1717" y2="27.5865" gradientUnits="userSpaceOnUse">
+<stop stop-color="#B597F6"/>
+<stop offset="1" stop-color="#96C6EA"/>
+</linearGradient>
+<linearGradient id="paint1_linear_3_23" x1="0" y1="0" x2="5.35856" y2="44.3413" gradientUnits="userSpaceOnUse">
+<stop stop-color="#B597F6"/>
+<stop offset="1" stop-color="#96C6EA"/>
+</linearGradient>
+</defs>
+</svg>

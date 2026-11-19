@@ -1,0 +1,26 @@
+# Builds Undavi from this checkout:  cd packaging/arch && makepkg -si
+# The AUR package, which builds a tagged release, is packaging/aur/PKGBUILD.
+pkgname=undavi
+pkgver=0.9.0
+pkgrel=1
+pkgdesc='Audio visualizer'
+arch=('x86_64' 'aarch64')
+url='https://github.com/karsoncaliff/undavi'
+license=('GPL-3.0-only')
+depends=('alsa-lib' 'dbus' 'gcc-libs' 'glibc' 'libpipewire' 'libxkbcommon' 'wayland' 'vulkan-icd-loader')
+optdepends=('libx11: X11 sessions' 'libxcursor: X11 sessions' 'libxrandr: X11 sessions' 'libxi: X11 sessions')
+makedepends=('cargo' 'clang')
+options=('!lto')
+
+_root="$startdir/../.."
+
+build() {
+    cd "$_root"
+    export CARGO_TARGET_DIR="$_root/target"
+    cargo build --release --locked
+}
+
+package() {
+    cd "$_root"
+    DESTDIR="$pkgdir" PREFIX=/usr ./packaging/install.sh
+}

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Undavi
+GenericName=Music Visualizer
+Comment=Visualize whatever is playing
+Exec=undavi
+Icon=undavi
+Terminal=false
+Categories=AudioVideo;Audio;Music;
+Keywords=music;visualizer;spectrum;lyrics;audio;
+StartupWMClass=undavi

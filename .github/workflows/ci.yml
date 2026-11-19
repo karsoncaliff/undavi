@@ -1,0 +1,128 @@
+# Checks every push to main and every pull request.
+#
+# - Format: rustfmt (fast, no build needed).
+# - Linux: clippy, tests, docs and a release build, plus the packaging files.
+#   This is the supported platform, so everything here must pass.
+# - Windows, macOS: does it still compile? Not supported yet, so these report
+#   without blocking.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A newer push to the same branch or PR cancels the older run.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  format:
+    name: Format
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: cargo fmt --check
+
+  linux:
+    name: Linux
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        # The same list as CONTRIBUTING.md; keep them in sync.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential pkg-config clang libclang-dev \
+            libpipewire-0.3-dev libspa-0.2-dev libasound2-dev libdbus-1-dev \
+            libxkbcommon-dev libwayland-dev \
+            desktop-file-utils appstream
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Clippy
+        run: cargo clippy --all-targets --locked -- -D warnings
+
+      - name: Tests
+        # Runs without audio, a D-Bus session or a display: the app falls back to
+        # ALSA and finds no player, which the tests expect. Snapshot rendering
+        # needs a GPU and stays opt-in (it's #[ignore]d).
+        run: cargo test --locked
+
+      - name: Docs
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc --no-deps --locked
+
+      - name: Release build
+        run: cargo build --release --locked
+
+      - name: Third-party licenses are up to date
+        # Regenerate with: python3 packaging/third-party-licenses.py
+        run: |
+          python3 -I packaging/third-party-licenses.py
+          git diff --exit-code packaging/THIRD-PARTY-LICENSES.txt
+
+      - name: Install script
+        run: |
+          shellcheck packaging/install.sh
+          stage=$(mktemp -d)
+          DESTDIR="$stage" PREFIX=/usr packaging/install.sh
+          for file in bin/undavi share/applications/undavi.desktop \
+                      share/metainfo/undavi.metainfo.xml \
+                      share/icons/hicolor/scalable/apps/undavi.svg \
+                      share/licenses/undavi/LICENSE \
+                      share/licenses/undavi/THIRD-PARTY-LICENSES.txt; do
+            test -e "$stage/usr/$file" || { echo "missing: $file"; exit 1; }
+          done
+
+      - name: Desktop entry and AppStream metadata
+        # The app ID isn't reverse-DNS yet (see docs/packaging.md); everything
+        # else must validate.
+        run: |
+          desktop-file-validate packaging/linux/undavi.desktop
+          appstreamcli validate --no-net \
+            --override=cid-desktopapp-is-not-rdns=info \
+            packaging/linux/undavi.metainfo.xml
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: undavi-linux-x86_64
+          path: target/release/undavi
+          retention-days: 14
+
+  other:
+    name: ${{ matrix.name }} (compiles)
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows
+            os: windows-latest
+          - name: macOS
+            os: macos-latest
+    runs-on: ${{ matrix.os }}
+    # Not supported yet: report, but don't block.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo check --all-targets --locked

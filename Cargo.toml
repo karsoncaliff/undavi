@@ -1,0 +1,55 @@
+[package]
+name = "undavi"
+version = "0.9.0"
+edition = "2024"
+rust-version = "1.90"
+description = "A sound visualizer for your desktop, with media art, playback controls and synced lyrics"
+repository = "https://github.com/karsoncaliff/undavi"
+license = "GPL-3.0-only"
+readme = "README.md"
+# Releases are built from this repository: a crates.io build would use the
+# unpatched iced_wgpu (see vendor/iced_wgpu/PATCHED.md).
+publish = false
+keywords = [
+    "music",
+    "visualizer",
+    "desktop",
+    "app",
+    "linux"
+]
+categories = ["visualization"]
+
+[lib]
+name = "undavi"
+path = "src/lib.rs"
+
+[[bin]]
+name = "undavi"
+path = "src/main.rs"
+# The library's docs are the ones worth reading; this avoids a name clash in `cargo doc`.
+doc = false
+
+[dependencies]
+cpal = "0.18.2"
+realfft = "3.5.1"
+ringbuf = "0.6.0"
+iced = { version = "0.14.0", features = ["canvas", "svg", "image", "tokio", "advanced"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+dirs = "7.0.0"
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
+ureq = { version = "3", features = ["json"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+mpris = "2.1.0"
+cpal = { version = "0.18.2", features = ["pipewire"] }
+# The same version cpal uses; for capturing single apps (see src/audio/apps.rs).
+pipewire = "0.10.1"
+
+[dev-dependencies]
+iced_test = "0.14"
+
+# iced 0.14 can pick a float surface format on NVIDIA/Vulkan, which washes colors
+# out; see vendor/iced_wgpu/PATCHED.md.
+[patch.crates-io]
+iced_wgpu = { path = "vendor/iced_wgpu" }

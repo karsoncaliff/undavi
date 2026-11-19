@@ -1,0 +1,5 @@
+/target
+/.idea
+/.vscode
+# Screen recordings for the README: uploaded to GitHub, too large for the repo.
+/assets/undavi/*.mp4

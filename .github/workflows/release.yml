@@ -1,0 +1,73 @@
+# Pushing a version tag (v0.9.0, …) builds the Linux release and creates a
+# *draft* GitHub release with it, using the CHANGELOG section as the notes.
+# Review the draft on GitHub, then publish it. See docs/releasing.md.
+
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  linux:
+    name: Linux x86_64
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        # The same list as CONTRIBUTING.md and ci.yml.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential pkg-config clang libclang-dev \
+            libpipewire-0.3-dev libspa-0.2-dev libasound2-dev libdbus-1-dev \
+            libxkbcommon-dev libwayland-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: The tag matches Cargo.toml
+        run: |
+          version=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
+          test "v$version" = "$GITHUB_REF_NAME" || {
+            echo "Tag $GITHUB_REF_NAME doesn't match Cargo.toml's version $version"; exit 1; }
+
+      - name: Test
+        run: cargo test --locked
+
+      - name: Build
+        run: cargo build --release --locked
+
+      - name: Package
+        # The tarball keeps the repository's layout, so its install script works
+        # as is: tar xf …; cd …; sudo packaging/install.sh
+        run: |
+          name="undavi-${GITHUB_REF_NAME#v}-x86_64-linux"
+          mkdir -p "dist/$name"
+          cp --parents -r target/release/undavi packaging/install.sh packaging/linux \
+            packaging/THIRD-PARTY-LICENSES.txt assets/icons/linux assets/fonts/OFL-Inter.txt \
+            LICENSE NOTICE README.md CHANGELOG.md "dist/$name/"
+          tar -C dist -czf "dist/$name.tar.gz" "$name"
+          (cd dist && sha256sum "$name.tar.gz" > "$name.tar.gz.sha256")
+
+      - name: Draft the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          # This version's CHANGELOG section, without the link definitions at the end.
+          awk -v v="$version" '
+            $0 ~ "^## \\[" v "\\]" { found = 1; next }
+            /^## \[/ { found = 0 }
+            found && !/^\[[^]]*\]: / { print }
+          ' CHANGELOG.md > notes.md
+          test -s notes.md || { echo "No CHANGELOG section for $version"; exit 1; }
+          gh release create "$GITHUB_REF_NAME" --draft \
+            --title "Undavi $version" --notes-file notes.md \
+            dist/*.tar.gz dist/*.sha256
