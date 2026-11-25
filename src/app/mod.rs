@@ -2093,6 +2093,19 @@ mod tests {
             .insert(id.into(), value.into());
     }
 
+    /// Settings with the app's own fonts: what fits on a line mustn't depend on the
+    /// fonts this machine has.
+    fn own_fonts() -> iced::Settings {
+        iced::Settings {
+            fonts: FONTS
+                .iter()
+                .map(|f| std::borrow::Cow::Borrowed(*f))
+                .collect(),
+            default_font: INTER,
+            ..iced::Settings::default()
+        }
+    }
+
     /// Renders each screen at the 1440×900 reference size (2× scale, like the mockups).
     /// Run with `cargo test snapshots -- --ignored`; PNGs land in `target/snapshots/`.
     #[test]
@@ -2159,15 +2172,7 @@ mod tests {
                     .update(&frames, bins, &app.sections.sound, 1.0 / 60.0);
             }
 
-            let settings = iced::Settings {
-                fonts: FONTS
-                    .iter()
-                    .map(|f| std::borrow::Cow::Borrowed(*f))
-                    .collect(),
-                default_font: INTER,
-                ..iced::Settings::default()
-            };
-            let mut sim = Simulator::with_size(settings, (width, height), app.view());
+            let mut sim = Simulator::with_size(own_fonts(), (width, height), app.view());
             let snapshot = sim.snapshot(&iced::Theme::Dark).expect("snapshot");
             let path = format!("{}/target/snapshots/{name}", env!("CARGO_MANIFEST_DIR"));
             snapshot.matches_image(&path).expect("write snapshot");
@@ -4404,7 +4409,7 @@ mod tests {
     fn mouse(app: &App, steps: &[(Mouse, &str)]) {
         use iced_test::simulator::{Simulator, click};
         let size = (app.window_size.width, app.window_size.height);
-        let mut sim = Simulator::with_size(iced::Settings::default(), size, app.view());
+        let mut sim = Simulator::with_size(own_fonts(), size, app.view());
         for (step, _) in steps {
             match *step {
                 Mouse::On(label) => {
