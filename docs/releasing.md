@@ -32,7 +32,7 @@ cargo test snapshots -- --ignored        # then look through target/snapshots/
 
 Then run the release build (`cargo run --release`) and try it with real music:
 System Audio, an app, Music player, the settings window, lyrics, full screen, and a
-narrow window.
+narrow window. On both Linux and Windows, if you can.
 
 ## 3. Tag
 
@@ -44,9 +44,10 @@ git push origin v0.10.0
 ```
 
 The **Release** workflow checks that the tag matches `Cargo.toml`, runs the
-tests, builds `undavi-<version>-x86_64-linux.tar.gz` (with a `.sha256`), and
-creates a **draft** GitHub release with this version's CHANGELOG section as the
-notes.
+tests, builds `undavi-<version>-x86_64-linux.tar.gz`,
+`undavi-<version>-x86_64-windows-setup.exe` and `undavi-<version>-x86_64-windows.zip`
+(each with a `.sha256`), and creates a **draft** GitHub release with this version's
+CHANGELOG section as the notes.
 
 ## 4. Publish
 
@@ -64,6 +65,26 @@ notes.
 
    Copy the updated checksum back into `packaging/aur/PKGBUILD` in this
    repository.
+
+## Unstable versions
+
+Pre-releases, tagged from the `dev` branch, for trying the latest features. Undavi offers
+them to those who turned on **Unstable versions** (General in the settings, from 1.0.0-alpha
+on; 0.10.0 and older never see them).
+
+1. In `Cargo.toml` and `CHANGELOG.md`, use a version with a hyphen: `1.0.0-alpha`, then
+   `1.0.0-alpha.2`, `1.0.0-beta`, … The PKGBUILDs and the AppStream file stay at the
+   last finished version (pacman's versions can't have hyphens).
+2. Push `dev`, and wait for CI to pass. Then `git tag -a v1.0.0-alpha -m "Undavi 1.0.0-alpha"`
+   and `git push origin v1.0.0-alpha`.
+3. The draft is already marked as a pre-release. Keep it that way when publishing it:
+   0.10.0 doesn't look at what's after the hyphen, so it would offer it to everyone.
+
+## The Windows installer and zip
+
+They're built on GitHub's Windows Server, and are for 64-bit Windows 10 version 2004 and
+newer. Users run the installer, or unpack the zip, right-click `install.ps1` and pick
+**Run with PowerShell**.
 
 ## The prebuilt tarball
 

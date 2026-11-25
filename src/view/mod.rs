@@ -1087,7 +1087,7 @@ impl App {
                 dont_ask,
             } => {
                 let installable =
-                    matches!(self.install, Some(Install::Prefix(_))) && release.tarball.is_some();
+                    matches!(self.install, Some(Install::Prefix(_))) && release.archive.is_some();
                 let then = if installable {
                     "It takes effect the next time Undavi starts."
                 } else if self.install == Some(Install::Package) {
@@ -1125,9 +1125,14 @@ impl App {
                         Message::CloseUpdate,
                     ))
                 };
+                let unstable = if release.unstable {
+                    " This one is unstable, only for trying the latest features."
+                } else {
+                    ""
+                };
                 (
                     format!("Undavi {} is available", release.version),
-                    format!("You have version {}. {then}", about::VERSION),
+                    format!("You have version {}.{unstable} {then}", about::VERSION),
                 )
             }
             UpdateState::Installing { release, .. } => {
@@ -1136,7 +1141,11 @@ impl App {
                     .push(close("Hide"));
                 (
                     format!("Updating to {}\u{2026}", release.version),
-                    "Downloading and installing. You may be asked for your password.".into(),
+                    if cfg!(windows) {
+                        "Downloading and installing.".into()
+                    } else {
+                        "Downloading and installing. You may be asked for your password.".into()
+                    },
                 )
             }
             UpdateState::Installed { version } => {

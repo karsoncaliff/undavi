@@ -17,7 +17,7 @@ an API; the **app modules** are internal and may change freely.
 | `spectrum` | Noise gate (`Gate`), bar heights (`Processor`) and beat detection (`BeatGlow`). Pure math. |
 | `settings` | The settings model, sections and their presets (`presets`), the keyboard shortcuts (`controls`), the settings file, and upgrades of older ones (`versions`). |
 | `lyrics` | LRC and Lyricsfile parsing, timing helpers, and the LRCLIB lookup thread. |
-| `media` | Now-playing info and transport commands (MPRIS on Linux). |
+| `media` | Now-playing info and transport commands (MPRIS on Linux, the system's media controls on Windows). |
 
 ### Internal (the app)
 
@@ -51,12 +51,13 @@ an API; the **app modules** are internal and may change freely.
 |---|---|---|
 | UI (main) | iced | `update`, `view` and drawing. Everything else reports back to it. |
 | Audio | cpal | Folds each buffer to left/right pairs and pushes them into a lock-free ring buffer. Never blocks. |
-| `undavi-mpris` | `media` | Polls the player every 500 ms and runs commands. |
+| `undavi-mpris` (Linux), `undavi-media` (Windows) | `media` | Polls the player every 500 ms and runs commands. |
 | `undavi-art` | `art` | Downloads and decodes album art and picks its colors. |
 | `undavi-lyrics` | `lyrics` | Finds lyrics for the current song. |
-| `undavi-app-capture` | `audio::linux` | Runs a PipeWire loop for an app source: our capture stream, and links to the app's streams as they appear. |
-| `undavi-pw-list` | `audio::linux` | Lists the playing apps for the source menu (short-lived, at most 500 ms). |
+| `undavi-app-capture` | `audio::linux`, `audio::windows` | Records an app source. Linux: a PipeWire loop with our capture stream, and links to the app's streams as they appear. Windows: a loopback for each of the app's processes that plays sound. |
+| `undavi-pw-list` (Linux), `undavi-app-list` (Windows) | `audio::linux`, `audio::windows` | Lists the playing apps for the source menu (short-lived, at most 500 ms). |
 | `undavi-motion` | `platform` | Asks the desktop for its reduced-motion setting when the settings window opens (short-lived, at most a second). |
+| `undavi-open` | `about` | Windows: opens a link or folder (short-lived). |
 | `undavi-update` | `app` | Checks for a new release at startup, and downloads and installs one (short-lived; reports back through an iced `Task`). |
 
 The worker threads share a small `Mutex`-guarded snapshot with the UI. The UI
@@ -99,13 +100,19 @@ See [Audio pipeline](audio-pipeline.md) for steps 2 to 4 in detail.
 
 | | Linux | Windows | macOS |
 |---|---|---|---|
-| System audio | PipeWire sink monitor | WASAPI loopback (untested) | Default input only |
-| Single apps, Music player | PipeWire | Not yet | Not yet |
-| Track info and controls | MPRIS | Not yet | Not yet |
+| System audio | PipeWire sink monitor | WASAPI loopback | Default input only |
+| Single apps, Music player | PipeWire | WASAPI process loopback (Windows 10 version 2004 and newer) | Not yet |
+| Track info and controls | MPRIS | The system's media controls (`Windows.Media.Control`) | Not yet |
+| The player's volume | MPRIS | The app's volume in the volume mixer | Not yet |
+| Album art | From the address the player gives | From the player itself | Not yet |
+| `.lrc` files next to the song | Yes | No: players don't say which file it is | Not yet |
 | Always on top | X11 only (Wayland has no way to ask) | Yes | Yes |
+| Reduced motion | The desktop portal | "Animation effects" in the accessibility settings | Not yet |
+| Updates | Release tarball, `install.sh` | Release zip, `install.ps1` | Not yet |
 
 `platform::Platform` records what's available, and the view leaves out controls
-that wouldn't do anything.
+that wouldn't do anything. What's specific to a system is in a module of that name
+(`audio::linux`, `media::windows`, …).
 
 ## The patched iced_wgpu
 

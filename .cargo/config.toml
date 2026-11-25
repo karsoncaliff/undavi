@@ -1,0 +1,4 @@
+# Windows: build the C runtime in, rather than needing the Visual C++ one, which a fresh
+# Windows doesn't have.
+[target.'cfg(all(windows, target_env = "msvc"))']
+rustflags = ["-C", "target-feature=+crt-static"]

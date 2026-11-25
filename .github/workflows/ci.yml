@@ -1,16 +1,15 @@
-# Checks every push to main and every pull request.
+# Checks every push to main and dev, and every pull request.
 #
 # - Format: rustfmt (fast, no build needed).
-# - Linux: clippy, tests, docs and a release build, plus the packaging files.
-#   This is the supported platform, so everything here must pass.
-# - Windows, macOS: does it still compile? Not supported yet, so these report
-#   without blocking.
+# - Linux, Windows: clippy, tests, docs and a release build, plus the packaging
+#   files. These are the supported platforms, so everything here must pass.
+# - macOS: does it still compile? Not supported yet, so it reports without blocking.
 
 name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
   pull_request:
   workflow_dispatch:
 
@@ -108,17 +107,99 @@ jobs:
           path: target/release/undavi
           retention-days: 14
 
+  windows:
+    name: Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Clippy
+        run: cargo clippy --all-targets --locked -- -D warnings
+
+      - name: Tests
+        # Runs without sound devices or a music player, like on Linux.
+        run: cargo test --locked
+
+      - name: Docs
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc --no-deps --locked
+
+      - name: Release build
+        run: cargo build --release --locked
+
+      - name: Install script
+        # In the Windows PowerShell that every Windows has, not the newer one.
+        shell: powershell
+        run: |
+          $prefix = Join-Path $env:RUNNER_TEMP 'a prefix'
+          $entry = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Undavi'
+          powershell -NoProfile -ExecutionPolicy Bypass -File install.ps1 -Prefix $prefix
+          if ($LASTEXITCODE) { exit 1 }
+          foreach ($file in 'bin\undavi.exe', 'install.ps1', 'licenses\LICENSE',
+                            'licenses\THIRD-PARTY-LICENSES.txt') {
+            if (-not (Test-Path "$prefix\$file")) { throw "missing: $file" }
+          }
+          if (-not (Test-Path $entry)) { throw 'not under Installed apps' }
+          powershell -NoProfile -ExecutionPolicy Bypass -File "$prefix\install.ps1" -Uninstall -Prefix $prefix
+          if ($LASTEXITCODE) { exit 1 }
+          if ((Test-Path $prefix) -or (Test-Path $entry)) { throw 'uninstalling left something behind' }
+
+      - name: Installer
+        # Inno Setup comes with GitHub's Windows images.
+        shell: powershell
+        run: |
+          $prefix = Join-Path $env:RUNNER_TEMP 'another prefix'
+          $entries = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall'
+          function Invoke-Quietly($program) {
+            $options = '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=`"$prefix`""
+            $p = Start-Process $program -ArgumentList $options -Wait -PassThru
+            if ($p.ExitCode) { throw "$program failed with $($p.ExitCode)" }
+          }
+          $iscc = (Get-Item "${env:ProgramFiles}*\Inno Setup *\ISCC.exe")[-1].FullName
+          & $iscc /Qp packaging\windows\undavi.iss
+          if ($LASTEXITCODE) { exit 1 }
+          $setup = (Get-Item target\installer\undavi-*-x86_64-windows-setup.exe).FullName
+          # Over what install.ps1 installed, then over itself, like an update.
+          powershell -NoProfile -ExecutionPolicy Bypass -File install.ps1 -Prefix $prefix
+          if ($LASTEXITCODE) { exit 1 }
+          Invoke-Quietly $setup
+          Invoke-Quietly $setup
+          foreach ($file in 'bin\undavi.exe', 'unins000.exe', 'licenses\LICENSE',
+                            'licenses\THIRD-PARTY-LICENSES.txt') {
+            if (-not (Test-Path "$prefix\$file")) { throw "missing: $file" }
+          }
+          if ((Get-ChildItem "$prefix\bin").Count -ne 1) { throw 'an old version was left behind' }
+          if (Test-Path "$prefix\install.ps1") { throw 'both kinds of install at once' }
+          if (-not (Test-Path "$entries\Undavi_is1")) { throw 'not under Installed apps' }
+          if (Test-Path "$entries\Undavi") { throw 'under Installed apps twice' }
+          # The script leaves it alone.
+          $ErrorActionPreference = 'Continue'
+          powershell -NoProfile -ExecutionPolicy Bypass -File install.ps1 -Prefix $prefix 2>$null
+          if (-not $LASTEXITCODE) { throw 'install.ps1 installed over it' }
+          $ErrorActionPreference = 'Stop'
+          Invoke-Quietly "$prefix\unins000.exe"
+          if ((Test-Path "$prefix\bin") -or (Test-Path "$entries\Undavi_is1")) {
+            throw 'uninstalling left something behind'
+          }
+          # (Not the exit code of the last program, which was meant to fail.)
+          exit 0
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: undavi-windows-x86_64
+          path: |
+            target/release/undavi.exe
+            target/installer/*.exe
+          retention-days: 14
+
   other:
-    name: ${{ matrix.name }} (compiles)
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: Windows
-            os: windows-latest
-          - name: macOS
-            os: macos-latest
-    runs-on: ${{ matrix.os }}
+    name: macOS (compiles)
+    runs-on: macos-latest
     # Not supported yet: report, but don't block.
     continue-on-error: true
     steps:

@@ -220,7 +220,11 @@ impl App {
                 if self.platform.updates {
                     out.push(o(
                         "Updates",
-                        &["Check for updates", "Install automatically"],
+                        &[
+                            "Check for updates",
+                            "Install automatically",
+                            "Unstable versions",
+                        ],
                     ));
                 }
                 out
@@ -1761,9 +1765,20 @@ impl App {
             group.push(updates("auto_install").switch(
                 "auto-update",
                 "Install automatically",
-                Some("Without asking first; you may still need to enter your password"),
+                Some(if cfg!(windows) {
+                    "Without asking first"
+                } else {
+                    "Without asking first; you may still need to enter your password"
+                }),
                 u.auto_install,
                 with(&|n| n.auto_install = !n.auto_install),
+            ))
+            .push(updates("unstable").switch(
+                "unstable-updates",
+                "Unstable versions",
+                Some("Early builds from the dev branch, only for the latest features. Expect bugs"),
+                u.unstable,
+                with(&|n| n.unstable = !n.unstable),
             ))
         }
     }

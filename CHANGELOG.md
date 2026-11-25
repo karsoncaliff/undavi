@@ -6,6 +6,25 @@ All notable changes to Undavi are listed here. The format follows
 
 ## [Unreleased]
 
+## [1.0.0-alpha] - 2026-11-25
+
+An unstable version, for trying the latest features.
+
+### Added
+
+- Windows support (64-bit Windows 11, or Windows 10 version 2004 and newer), with what
+  Undavi does on Linux:
+  - Track info, album art, synced lyrics and playback controls for any player that shows
+    up in the media controls of Windows. The volume is the player's in the volume mixer.
+  - Single apps, Music player and outputs as audio sources, next to system audio and
+    inputs.
+  - An installer, or a zip with an install script (`install.ps1`) instead. Either adds
+    Undavi to the Start menu and to Installed apps, and gets updates of its own kind.
+  - Reduced motion, following "Animation effects" in the accessibility settings.
+  - An icon for `undavi.exe`, and no console window next to it.
+- "Unstable versions" under General in the settings: updates to early builds from the dev
+  branch, only for trying the latest features.
+
 ## [0.10.0] - 2026-11-25
 
 0.9.0 can't update itself, so this version has to be installed by hand. See the
@@ -160,6 +179,7 @@ The first public release.
 - Settings saved in a versioned file, with automatic migration from older
   versions and from Muvijo, Undavi's previous name.
 
-[Unreleased]: https://github.com/karsoncaliff/undavi/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/karsoncaliff/undavi/compare/v1.0.0-alpha...HEAD
+[1.0.0-alpha]: https://github.com/karsoncaliff/undavi/compare/v0.10.0...v1.0.0-alpha
 [0.10.0]: https://github.com/karsoncaliff/undavi/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/karsoncaliff/undavi/releases/tag/v0.9.0

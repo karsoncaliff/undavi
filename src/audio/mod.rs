@@ -40,6 +40,12 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 #[cfg(target_os = "linux")]
 mod linux;
+#[cfg(target_os = "linux")]
+use linux as apps;
+#[cfg(windows)]
+pub(crate) mod windows;
+#[cfg(windows)]
+use self::windows as apps;
 
 /// The default FFT size (samples per analysis window).
 pub const FFT_SIZE: usize = 4096;
@@ -71,9 +77,9 @@ pub enum SourceKind {
     /// Whatever is playing on the default output (loopback / sink monitor).
     SystemOutput,
     /// Whichever app the music player is (see [`Capture::follow_player`]), so
-    /// other sounds don't move the bars. PipeWire only.
+    /// other sounds don't move the bars. See [`has_app_capture`].
     Player,
-    /// One app (all of its playback streams). PipeWire only.
+    /// One app (all of its playback streams). See [`has_app_capture`].
     App,
     /// What's playing on a specific output device.
     Output,
@@ -142,8 +148,10 @@ pub fn list_sources(host: &cpal::Host) -> Vec<Source> {
             );
             continue;
         }
-        if desc.supports_output() && desc.supports_input() {
-            // A sink whose monitor we can capture (PipeWire) — "what's playing on X".
+        // "What's playing on X": a sink whose monitor we can capture (PipeWire), or an
+        // output we can open as a loopback (WASAPI).
+        let monitored = desc.supports_output() && (desc.supports_input() || cfg!(windows));
+        if monitored {
             outputs.push(Source {
                 id,
                 label: name,
@@ -164,16 +172,16 @@ pub fn list_sources(host: &cpal::Host) -> Vec<Source> {
 }
 
 /// "Music player" and every app playing right now, where single apps can be
-/// captured (PipeWire).
+/// captured.
 fn app_sources(host: &cpal::Host) -> Vec<Source> {
-    #[cfg(target_os = "linux")]
-    if host.id() == cpal::HostId::PipeWire {
+    #[cfg(any(target_os = "linux", windows))]
+    if has_app_capture(host) {
         let mut out = vec![Source {
             id: String::new(),
             label: "Music player".into(),
             kind: SourceKind::Player,
         }];
-        out.extend(linux::playing_apps().into_iter().map(|a| Source {
+        out.extend(apps::playing_apps().into_iter().map(|a| Source {
             id: a.key,
             label: a.label,
             kind: SourceKind::App,
@@ -184,14 +192,47 @@ fn app_sources(host: &cpal::Host) -> Vec<Source> {
     Vec::new()
 }
 
-/// Whether single apps can be captured with this host (PipeWire).
+/// Whether single apps can be captured with this host: PipeWire, or WASAPI on
+/// Windows 10 version 2004 and newer.
 pub fn has_app_capture(host: &cpal::Host) -> bool {
     #[cfg(target_os = "linux")]
     if host.id() == cpal::HostId::PipeWire {
         return true;
     }
+    #[cfg(windows)]
+    if host.id() == cpal::HostId::Wasapi {
+        return apps::supported();
+    }
     let _ = host;
     false
+}
+
+/// An app with at least one playback stream.
+#[cfg(any(target_os = "linux", windows))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct PlayingApp {
+    /// Stable identifier: the app's name in lowercase.
+    key: String,
+    /// Name to show, e.g. "Spotify".
+    label: String,
+}
+
+/// What an app capture records.
+#[cfg(any(target_os = "linux", windows))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Target {
+    /// Nothing (yet).
+    None,
+    /// Every stream of the app with this key.
+    App(String),
+    /// Every stream of the app that matches this player (see [`player_matches`]).
+    Player {
+        /// What the player calls itself to the system, as in
+        /// [`Track::player_bus`](crate::media::Track::player_bus).
+        bus: String,
+        /// The player's display name, e.g. "Mozilla Firefox".
+        identity: String,
+    },
 }
 
 /// Lowercase letters and digits only: "Mozilla Firefox" → "mozillafirefox".
@@ -202,10 +243,11 @@ fn squash(s: &str) -> String {
         .collect()
 }
 
-/// Whether an MPRIS player (`bus`: its D-Bus name after
-/// `org.mpris.MediaPlayer2.`, `identity`: its display name) is the app with
-/// these names. Players and streams name themselves inconsistently ("firefox"
-/// vs "Firefox", "chromium.instance42" vs "Google Chrome" / "chrome"), so this
+/// Whether a player (`bus` and `identity`: see
+/// [`Track::player_bus`](crate::media::Track::player_bus) and
+/// [`Track::player_name`](crate::media::Track::player_name)) is the app with these
+/// names. Players and streams name themselves inconsistently ("firefox" vs
+/// "Firefox", "chromium.instance42" vs "Google Chrome" / "chrome"), so this
 /// compares squashed names, allowing one to contain the other.
 pub fn player_matches(bus: &str, identity: &str, app_names: &[String]) -> bool {
     // Every meaningful part of the bus name: not instance numbers, and not the
@@ -294,9 +336,9 @@ fn is_fatal(kind: cpal::ErrorKind) -> bool {
 enum Backend {
     /// A device, through cpal (kept alive; dropping it stops the stream).
     Device(#[allow(dead_code)] cpal::Stream),
-    /// One app, or the player's app, through PipeWire.
-    #[cfg(target_os = "linux")]
-    App(linux::AppCapture),
+    /// One app, or the player's app.
+    #[cfg(any(target_os = "linux", windows))]
+    App(apps::AppCapture),
 }
 
 /// A running capture stream. Dropping it stops capture.
@@ -400,16 +442,16 @@ impl Capture {
 
     /// Capture one app, or (for [`SourceKind::Player`]) nothing until
     /// [`Capture::follow_player`] says which app the player is.
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", windows))]
     fn start_app(source: &Source) -> Result<Self, String> {
-        let rb = HeapRb::<f32>::new(2 * (linux::RATE as usize).next_power_of_two());
+        let rb = HeapRb::<f32>::new(2 * (apps::RATE as usize).next_power_of_two());
         let (mut producer, consumer) = rb.split();
         let dead = Arc::new(AtomicBool::new(false));
         let target = match source.kind {
-            SourceKind::App => linux::Target::App(source.id.clone()),
-            _ => linux::Target::None,
+            SourceKind::App => Target::App(source.id.clone()),
+            _ => Target::None,
         };
-        let capture = linux::AppCapture::start(
+        let capture = apps::AppCapture::start(
             target,
             move |pairs: &[f32]| {
                 let room = producer.vacant_len() & !1;
@@ -420,29 +462,29 @@ impl Capture {
         Ok(Self {
             backend: Backend::App(capture),
             consumer,
-            sample_rate: linux::RATE,
+            sample_rate: apps::RATE,
             dead,
         })
     }
 
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(any(target_os = "linux", windows)))]
     fn start_app(_source: &Source) -> Result<Self, String> {
         Err("capturing single apps isn't supported on this platform".into())
     }
 
-    /// For a [`SourceKind::Player`] capture: record the app behind this MPRIS
-    /// player (`bus`: its D-Bus name after `org.mpris.MediaPlayer2.`, `identity`:
-    /// its display name), or nothing for `None`. Cheap to call every frame;
-    /// does nothing for other captures.
+    /// For a [`SourceKind::Player`] capture: record the app behind this player (its
+    /// [`Track::player_bus`](crate::media::Track::player_bus) and
+    /// [`Track::player_name`](crate::media::Track::player_name)), or nothing for
+    /// `None`. Cheap to call every frame; does nothing for other captures.
     pub fn follow_player(&mut self, player: Option<(&str, &str)>) {
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", windows))]
         if let Backend::App(capture) = &mut self.backend {
             capture.set_target(match player {
-                Some((bus, identity)) => linux::Target::Player {
+                Some((bus, identity)) => Target::Player {
                     bus: bus.to_string(),
                     identity: identity.to_string(),
                 },
-                None => linux::Target::None,
+                None => Target::None,
             });
         }
         let _ = player;
@@ -453,7 +495,7 @@ impl Capture {
     pub fn app_streams(&self) -> Option<usize> {
         match &self.backend {
             Backend::Device(_) => None,
-            #[cfg(target_os = "linux")]
+            #[cfg(any(target_os = "linux", windows))]
             Backend::App(capture) => Some(capture.linked()),
         }
     }

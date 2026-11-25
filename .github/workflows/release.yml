@@ -1,6 +1,9 @@
-# Pushing a version tag (v0.9.0, …) builds the Linux release and creates a
-# *draft* GitHub release with it, using the CHANGELOG section as the notes.
+# Pushing a version tag (v0.9.0, …) builds the Linux and Windows releases and creates
+# a *draft* GitHub release with them, using the CHANGELOG section as the notes.
 # Review the draft on GitHub, then publish it. See docs/releasing.md.
+#
+# Versions with a hyphen (v1.0.0-alpha, …) become pre-releases, which Undavi only offers
+# to those who turned on "Unstable versions".
 
 name: Release
 
@@ -9,7 +12,7 @@ on:
     tags: ["v*"]
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   CARGO_TERM_COLOR: always
@@ -56,6 +59,67 @@ jobs:
           tar -C dist -czf "dist/$name.tar.gz" "$name"
           (cd dist && sha256sum "$name.tar.gz" > "$name.tar.gz.sha256")
 
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: |
+            dist/*.tar.gz
+            dist/*.sha256
+
+  windows:
+    name: Windows x86_64
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Test
+        run: cargo test --locked
+
+      - name: Build
+        run: cargo build --release --locked
+
+      - name: Package
+        # The zip keeps the repository's layout too, so its install script works as is.
+        # (Windows' own tar makes zips; the one in this shell doesn't.)
+        shell: bash
+        run: |
+          name="undavi-${GITHUB_REF_NAME#v}-x86_64-windows"
+          mkdir -p "dist/$name"
+          cp --parents target/release/undavi.exe install.ps1 \
+            packaging/THIRD-PARTY-LICENSES.txt assets/fonts/OFL-Inter.txt \
+            assets/icons/ui/LICENSE LICENSE NOTICE README.md CHANGELOG.md "dist/$name/"
+          "$SYSTEMROOT/System32/tar.exe" -a -cf "dist/$name.zip" -C dist "$name"
+          # Inno Setup comes with GitHub's Windows images.
+          iscc=$(ls -d "/c/Program Files"*"/Inno Setup "*/ISCC.exe | tail -1)
+          "$iscc" packaging/windows/undavi.iss
+          cp "target/installer/$name-setup.exe" dist/
+          cd dist
+          for file in "$name.zip" "$name-setup.exe"; do
+            sha256sum "$file" > "$file.sha256"
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: |
+            dist/*.zip
+            dist/*.exe
+            dist/*.sha256
+
+  release:
+    name: Draft release
+    needs: [linux, windows]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
       - name: Draft the release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -68,6 +132,10 @@ jobs:
             found && !/^\[[^]]*\]: / { print }
           ' CHANGELOG.md > notes.md
           test -s notes.md || { echo "No CHANGELOG section for $version"; exit 1; }
-          gh release create "$GITHUB_REF_NAME" --draft \
+          case "$version" in
+            *-*) kind=--prerelease ;;
+            *) kind= ;;
+          esac
+          gh release create "$GITHUB_REF_NAME" --draft ${kind:+"$kind"} \
             --title "Undavi $version" --notes-file notes.md \
-            dist/*.tar.gz dist/*.sha256
+            dist/*.tar.gz dist/*.zip dist/*.exe dist/*.sha256

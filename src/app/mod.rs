@@ -516,7 +516,11 @@ impl App {
         };
         // Tests drive the real app; never let them go online.
         let check = if app.platform.updates && app.updates.check && !cfg!(test) {
-            Task::perform(background(update::check), Message::UpdateChecked)
+            let unstable = app.updates.unstable;
+            Task::perform(
+                background(move || update::check(unstable)),
+                Message::UpdateChecked,
+            )
         } else {
             Task::none()
         };
@@ -532,7 +536,7 @@ impl App {
                 let auto = self.updates.auto_install && matches!(found.install, Install::Prefix(_));
                 self.install = Some(found.install);
                 if let Some(release) = found.release {
-                    if auto && release.tarball.is_some() {
+                    if auto && release.archive.is_some() {
                         return self.start_install(release, false);
                     }
                     self.update = UpdateState::Offer {
@@ -1398,8 +1402,8 @@ impl App {
     }
 
     fn update_art(&mut self, now: Instant) {
-        let art_url = self.track.as_ref().and_then(|t| t.art_url.as_deref());
-        self.art_loader.want(art_url);
+        let art = self.track.as_ref().and_then(|t| t.art.as_ref());
+        self.art_loader.want(art);
         let art = self.art_loader.snapshot();
         // A different cover (or none any more): cross-fade the background from the old one.
         let changed = match (&self.art, &art) {
@@ -2220,6 +2224,20 @@ mod tests {
         };
         render("update-offer", &offer);
         render_at("narrow-480-update", 480.0, 600.0, &offer);
+        let unstable = |app: &mut App| {
+            app.install = Some(Install::Prefix("/usr".into()));
+            app.update = UpdateState::Offer {
+                release: Release {
+                    version: "1.0.0-alpha".into(),
+                    unstable: true,
+                    ..test_release()
+                },
+                auto: false,
+                dont_ask: false,
+            };
+        };
+        render("update-unstable", &unstable);
+        render_at("narrow-480-update-unstable", 480.0, 600.0, &unstable);
         render("update-package", &|app| {
             app.install = Some(Install::Package);
             app.update = UpdateState::Offer {
@@ -3027,8 +3045,9 @@ mod tests {
     fn test_release() -> Release {
         Release {
             version: "0.10.0".into(),
+            unstable: false,
             page: "https://example.invalid/releases/v0.10.0".into(),
-            tarball: Some((
+            archive: Some((
                 "https://example.invalid/undavi.tar.gz".into(),
                 "https://example.invalid/undavi.tar.gz.sha256".into(),
             )),
@@ -3166,7 +3185,7 @@ mod tests {
             title: "Somewhere, slowly".into(),
             artist: "Luna Bay".into(),
             album: "Moon / Tide".into(),
-            art_url: None,
+            art: None,
             url: None,
             length: Some(Duration::from_secs(200)),
             position: Duration::from_secs(96),
@@ -3508,10 +3527,19 @@ mod tests {
         app.focus = Some(FocusId::Named("auto-update"));
         press(&mut app, named(Named::Enter), false);
         assert!(app.updates.auto_install);
+        // Unstable versions are only for those who ask, and not for packages.
+        assert!(has(&app, "unstable-updates") && !app.updates.unstable);
+        app.focus = Some(FocusId::Named("unstable-updates"));
+        press(&mut app, named(Named::Enter), false);
+        assert!(app.updates.unstable);
+        app.install = Some(Install::Package);
+        assert!(!has(&app, "unstable-updates"));
+        app.install = None;
         app.focus = Some(FocusId::Named("check-updates"));
         press(&mut app, named(Named::Enter), false);
         assert!(!app.updates.check);
         assert!(!has(&app, "auto-update"), "nothing to install unchecked");
+        assert!(!has(&app, "unstable-updates"));
 
         // They aren't part of the section's presets…
         assert!(!app.section_edited(SectionId::General));

@@ -64,7 +64,7 @@ To reset everything, quit Undavi and delete the file.
     ]
   },
   "source": { "kind": "app", "id": "spotify", "label": "Spotify" },
-  "updates": { "check": true, "auto_install": false },
+  "updates": { "check": true, "auto_install": false, "unstable": false },
   "monitor": { "signal": true, "spectrum": true, "beats": true, "performance": true },
   "favorites": ["sound.sensitivity", "visualizer:glow"]
 }
@@ -96,8 +96,8 @@ To reset everything, quit Undavi and delete the file.
   that's gone falls back to System Audio at startup; an app that isn't playing is
   waited for.
 - `updates` holds the General section's update switches: `check` looks for a new
-  release on startup, `auto_install` installs it without asking (see
-  [packaging.md](packaging.md#updates)).
+  release on startup, `auto_install` installs it without asking, and `unstable` counts
+  pre-releases too (see [packaging.md](packaging.md#updates)).
 - The visualizer's and the background's `shader` name the visualizer and the
   background: a built-in (`bars`, `radial`, `wave`; `solid`, `album-art`,
   `ambient`) or a file in the `shaders` folder next to `settings.json`, without

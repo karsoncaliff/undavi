@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Write THIRD-PARTY-LICENSES.txt: the license texts of every crate compiled
-into the Linux build of Undavi, which their licenses ask to ship with it.
+into Undavi (for Linux or Windows), which their licenses ask to ship with it.
 
 Run from anywhere, after the crates have been downloaded (any cargo build):
 
@@ -17,18 +17,19 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 OUT = ROOT / "packaging" / "THIRD-PARTY-LICENSES.txt"
-TARGET = "x86_64-unknown-linux-gnu"
+TARGETS = ["x86_64-unknown-linux-gnu", "x86_64-pc-windows-msvc"]
 LICENSE_FILE = re.compile(r"^(licen[cs]e|copying|notice|copyright)([-_.].*)?$", re.I)
 RULE = "=" * 78
 
 
-def crates():
-    """Every package in the normal (non-dev) dependency graph, except Undavi."""
+def crates(target):
+    """Every package in the normal (non-dev) dependency graph for a target, except
+    Undavi."""
     meta = json.loads(
         subprocess.run(
             ["cargo", "metadata", "--format-version", "1", "--locked",
-             "--filter-platform", TARGET],
-            cwd=ROOT, check=True, capture_output=True, text=True,
+             "--filter-platform", target],
+            cwd=ROOT, check=True, capture_output=True, text=True, encoding="utf-8",
         ).stdout
     )
     packages = {p["id"]: p for p in meta["packages"]}
@@ -44,13 +45,22 @@ def crates():
             if any(kind["kind"] is None for kind in dep["dep_kinds"]):
                 stack.append(dep["pkg"])
     seen.discard(root)
-    return sorted((packages[p] for p in seen), key=lambda p: (p["name"], p["version"]))
+    return {p: packages[p] for p in seen}
+
+
+def all_crates():
+    """The crates for every target, sorted."""
+    found = {}
+    for target in TARGETS:
+        found |= crates(target)
+    return sorted(found.values(), key=lambda p: (p["name"], p["version"]))
 
 
 def license_texts(package):
     folder = pathlib.Path(package["manifest_path"]).parent
     texts = []
-    for path in sorted(folder.iterdir()):
+    # (By name: paths themselves don't sort the same way on every system.)
+    for path in sorted(folder.iterdir(), key=lambda p: p.name):
         if path.is_file() and LICENSE_FILE.match(path.name):
             text = path.read_text(encoding="utf-8", errors="replace").strip()
             if text:
@@ -92,7 +102,7 @@ def fallback_texts(package):
 
 def main():
     groups = {}  # normalized license texts -> (texts, crates that ship them)
-    for package in crates():
+    for package in all_crates():
         label = f"{package['name']} {package['version']}"
         texts = license_texts(package) or fallback_texts(package)
         # The same license with different line wrapping counts as one.
@@ -117,9 +127,9 @@ def main():
         out += [RULE, "Used by:"] + [f"  {u}" for u in users] + [RULE, ""]
         for text in texts:
             out += [text, ""]
-    OUT.write_text("\n".join(out).rstrip() + "\n", encoding="utf-8")
+    OUT.write_text("\n".join(out).rstrip() + "\n", encoding="utf-8", newline="\n")
     count = sum(len(u) for _, u in groups.values())
-    print(f"wrote {OUT.relative_to(ROOT)}: {count} crates, {len(groups)} distinct license texts",
+    print(f"wrote {OUT.relative_to(ROOT).as_posix()}: {count} crates, {len(groups)} distinct license texts",
           file=sys.stderr)
 
 

@@ -9,7 +9,7 @@
 //! | [`spectrum`] | Turns spectra into animated bar heights, beats and a noise gate. |
 //! | [`settings`] | The settings model, presets, and loading/saving them. |
 //! | [`lyrics`] | Parses LRC and Lyricsfile lyrics and fetches them from LRCLIB. |
-//! | [`media`] | What the music player is playing, and controlling it (MPRIS). |
+//! | [`media`] | What the music player is playing, and controlling it. |
 //!
 //! The data flows one way, once per frame:
 //!
@@ -52,6 +52,7 @@ use iced::{Size, window};
 
 /// Matches the `.desktop` file and icon names, so Wayland compositors and taskbars
 /// can find the app's icon.
+#[cfg(target_os = "linux")]
 const APP_ID: &str = "undavi";
 
 /// The window icon, for X11 and Windows (Wayland uses the `.desktop` file's icon).
@@ -62,6 +63,16 @@ fn window_icon() -> Option<window::Icon> {
         .into_rgba8();
     let (w, h) = img.dimensions();
     window::icon::from_rgba(img.into_raw(), w, h).ok()
+}
+
+/// Print to the terminal Undavi was started from, if it was. (Windows doesn't connect
+/// an app without a console window of its own to it.)
+#[cfg(windows)]
+pub fn attach_console() {
+    use windows::Win32::System::Console::{ATTACH_PARENT_PROCESS, AttachConsole};
+
+    // SAFETY: a plain call. It fails without a terminal, which is fine.
+    let _ = unsafe { AttachConsole(ATTACH_PARENT_PROCESS) };
 }
 
 /// Open the Undavi window and run until it's closed.

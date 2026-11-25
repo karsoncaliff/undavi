@@ -8,7 +8,7 @@
 <p align="center">
   <a href="https://github.com/karsoncaliff/undavi/releases/latest"><img src="https://img.shields.io/github/v/release/karsoncaliff/undavi" alt="Latest release"></a>
   <a href="https://github.com/karsoncaliff/undavi/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/karsoncaliff/undavi/ci.yml?label=CI" alt="CI status"></a>
-  <img src="https://img.shields.io/badge/platform-Linux-blue?logo=linux&logoColor=white" alt="Platform: Linux">
+  <img src="https://img.shields.io/badge/platform-Linux%20%7C%20Windows-blue" alt="Platform: Linux and Windows">
   <a href="CONTRIBUTING.md#building"><img src="https://img.shields.io/badge/rust-1.90%2B-orange?logo=rust" alt="Rust 1.90+"></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/karsoncaliff/undavi" alt="License: GPL-3.0"></a>
 </p>
@@ -58,19 +58,21 @@ https://github.com/user-attachments/assets/113cb537-b453-4312-9901-2768c247f9f7
 - **Keyboard friendly:** every control is reachable with Tab and adjustable with
   the arrow keys, and every shortcut can be changed.
 - **Updates:** Undavi tells you about new releases and can install them for you
-  (with pacman, it leaves that to pacman). You can turn this off.
+  (with pacman, it leaves that to pacman). You can turn this off, or also get unstable
+  versions to try the latest features.
+- **Linux and Windows,** with the same features on both.
 
 ## Requirements
 
-| | Needed |
-|---|---|
-| **Sound** | PipeWire as the sound server, for system audio and single apps. Without it, Undavi can still visualize an input such as a microphone. |
-| **Music player** | One that supports MPRIS, for track info, album art, lyrics and playback controls. Most do: Spotify, Firefox, Chromium-based browsers, VLC, Rhythmbox, Elisa, Lollypop, Strawberry, and mpv with the `mpv-mpris` plugin. |
-| **Graphics** | Vulkan, or OpenGL 3.3 / OpenGL ES 3.0. |
-| **Desktop** | Wayland or X11. |
-| **Building** | Rust 1.90 or newer, plus the libraries in [CONTRIBUTING.md](CONTRIBUTING.md#building). |
+| | Linux | Windows |
+|---|---|---|
+| **System** | Wayland or X11; see [below](#linux-distributions) | 64-bit Windows 11, or Windows 10 version 2004 and newer |
+| **Sound** | PipeWire as the sound server, for system audio and single apps. Without it, Undavi can still visualize an input such as a microphone. | Nothing more |
+| **Music player** | One that supports MPRIS, for track info, album art, lyrics and playback controls. Most do: Spotify, Firefox, Chromium-based browsers, VLC, Rhythmbox, Elisa, Lollypop, Strawberry, and mpv with the `mpv-mpris` plugin. | One that shows up in the media controls (next to the volume in the quick settings). Most do: Spotify, browsers, Media Player, and many more. |
+| **Graphics** | Vulkan, or OpenGL 3.3 / OpenGL ES 3.0 | DirectX 12, Vulkan or OpenGL 3.3 |
+| **Building** | Rust 1.90 or newer, plus the libraries in [CONTRIBUTING.md](CONTRIBUTING.md#building) | Rust 1.90 or newer, plus the [Visual Studio C++ build tools](CONTRIBUTING.md#building) |
 
-### Distributions
+### Linux distributions
 
 Undavi is developed on Arch Linux, and every change is built and tested on
 Ubuntu 24.04. It should work on any distribution that uses PipeWire for sound,
@@ -88,14 +90,30 @@ To check yours, run `pactl info | grep "Server Name"`: it should mention
 PipeWire. Distributions that still use PulseAudio (such as Ubuntu 22.04 LTS)
 can switch to PipeWire, or use Undavi with a microphone input.
 
-Windows and macOS builds may run, but aren't supported yet: there are no
-playback controls there, and macOS can't capture system audio.
+macOS builds may run, but aren't supported yet: there are no playback controls there,
+and it can't capture system audio.
 
 ## Installing
 
 Already have 0.9.0? It can't update itself, so see [MIGRATING.md](MIGRATING.md).
 
-### Download
+### Windows
+
+Download `undavi-<version>-x86_64-windows-setup.exe` from the
+[latest release](https://github.com/karsoncaliff/undavi/releases/latest) and run it.
+Undavi is then in the Start menu.
+
+It's installed for you alone, to `%LOCALAPPDATA%\Programs\Undavi` unless you pick
+another folder, and doesn't need administrator rights. Windows may warn about an app it
+doesn't know, since the builds aren't signed: **More info**, then **Run anyway**.
+
+To remove it, use **Installed apps** in the Windows settings.
+
+If you'd rather see what an installer does, there's also a zip with a
+[script](install.ps1) that does the same. Unpack `undavi-<version>-x86_64-windows.zip`,
+right-click `install.ps1` in the folder and pick **Run with PowerShell**.
+
+### Linux
 
 Each [release](https://github.com/karsoncaliff/undavi/releases) has a ready-made
 build for 64-bit PCs, for distributions with glibc 2.39 or newer (Ubuntu 24.04,
@@ -135,11 +153,13 @@ sudo ./install.sh
 ```
 
 Either way, Undavi is installed to `/usr/local` with its menu entry and icons.
-Run `undavi` or find it in your app launcher. 
+Run `undavi` or find it in your app launcher.
+
+On Windows, the last line is `powershell -ExecutionPolicy Bypass -File install.ps1`.
 
 ### Uninstalling
 
-To remove it, run
+To remove it on Linux, run
 `sudo ./install.sh --uninstall` from the same folder.
 
 ## Using Undavi
@@ -149,7 +169,7 @@ click the source button at the top to pick something else:
 
 - **Apps:** only one app, such as Spotify or a browser, so notifications and
   other sounds don't move the bars. **Music player** follows whichever app is
-  playing the current song. (PipeWire only.)
+  playing the current song. (On Linux, with PipeWire only.)
 - **Outputs** and **Inputs:** a specific device, or a microphone.
 
 Undavi remembers your choice.
@@ -226,7 +246,8 @@ How the current track is shown, how the playback bar looks (its style, what's in
 and the seek bar's curve, thickness, handle and times), the lyrics' size, glow and
 timing, the keyboard shortcuts, how far a step of seeking or volume goes, what the mouse
 does over the bars, when the controls hide, the frame rate, (where the desktop allows it)
-staying on top, and whether Undavi checks for updates and installs them.
+staying on top, whether Undavi checks for updates and installs them, and whether that
+includes unstable versions.
 
 https://github.com/user-attachments/assets/4f4a0219-77c5-40e9-aba1-8365805c0257
 
@@ -257,7 +278,8 @@ Undavi has no accounts, ads or telemetry. It only goes online for three things:
 - **Lyrics:** the title, artist, album and length of the song that's playing are
   sent to [lrclib.net](https://lrclib.net). Lyrics are kept in memory while Undavi
   runs and never saved to disk.
-- **Album art:** downloaded from the address your music player provides.
+- **Album art:** downloaded from the address your music player provides. (Not on
+  Windows, where the player provides the picture itself.)
 - **Updates:** when Undavi starts, it asks GitHub for the latest release. Turn
   this off in the settings (General), or with "Don't ask again" in the update pop-up.
 
@@ -286,12 +308,17 @@ The full roadmap for future features can be found [here](ROADMAP.md).
 - **The bars don't move.** Check that the source button says the right device.
   If it says **Default input**, Undavi can't capture system audio here (PipeWire
   isn't running), so it's listening to the microphone.
-- **No track info, playback controls or lyrics.** Your player doesn't support
-  MPRIS, or isn't running. Lyrics also need the song to be in LRCLIB.
+- **No track info, playback controls or lyrics.** Your player isn't running, or
+  doesn't support MPRIS (Linux) or the media controls (Windows). Lyrics also need the
+  song to be in LRCLIB, or a `.lrc` file next to it (Linux: players on Windows don't
+  say which file they're playing).
+- **An app doesn't move the bars on Windows.** Some music apps have an "exclusive
+  mode", which keeps their sound from everything else. Turn it off in the app.
 - **"Always on top" is missing.** Wayland doesn't let apps keep themselves on
   top; use your compositor's window rules instead.
-- **Rendering problems or a blank window.** Try the OpenGL backend:
-  `WGPU_BACKEND=gl undavi`.
+- **Rendering problems or a blank window.** Try another graphics backend. On Linux,
+  OpenGL: `WGPU_BACKEND=gl undavi`. On Windows, set `WGPU_BACKEND` to `dx12` or
+  `vulkan` first (in PowerShell, `$env:WGPU_BACKEND = 'dx12'`).
 
 ## Contributing
 

@@ -7,21 +7,24 @@ use std::sync::atomic::{AtomicBool, Ordering};
 /// Detected once at startup.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Platform {
-    /// Now-playing info and transport controls (MPRIS; Linux only so far). Without
-    /// it there's no track, cover or lyrics, so those options are hidden too.
+    /// Now-playing info and transport controls (see `media`). Without it there's no
+    /// track, cover or lyrics, so those options are hidden too.
     pub media: bool,
     /// Keeping the window above others. Wayland has no way for an app to ask.
     pub always_on_top: bool,
-    /// Installing new releases: there are release builds for x86-64 Linux only.
+    /// Installing new releases: there are release builds for x86-64 Linux and Windows.
     pub updates: bool,
 }
 
 impl Platform {
     pub fn detect() -> Self {
         Self {
-            media: cfg!(target_os = "linux"),
+            media: cfg!(any(target_os = "linux", windows)),
             always_on_top: !on_wayland(),
-            updates: cfg!(all(target_os = "linux", target_arch = "x86_64")),
+            updates: cfg!(all(
+                any(target_os = "linux", windows),
+                target_arch = "x86_64"
+            )),
         }
     }
 
@@ -43,7 +46,7 @@ fn on_wayland() -> bool {
     cfg!(target_os = "linux") && (set("WAYLAND_DISPLAY") || set("WAYLAND_SOCKET"))
 }
 
-/// The system's reduced-motion setting, as last read. (Linux only so far; off
+/// The system's reduced-motion setting, as last read. (Linux and Windows so far; off
 /// everywhere else.)
 #[derive(Clone, Debug, Default)]
 pub struct ReducedMotion(Arc<AtomicBool>);
@@ -57,7 +60,7 @@ impl ReducedMotion {
     /// answer).
     pub fn refresh(&self) {
         // Tests look the same on any desktop.
-        #[cfg(all(target_os = "linux", not(test)))]
+        #[cfg(all(any(target_os = "linux", windows), not(test)))]
         {
             let flag = self.0.clone();
             let _ = std::thread::Builder::new()
@@ -97,4 +100,26 @@ fn reduced_motion() -> Option<bool> {
         return Some(true);
     }
     read("org.gnome.desktop.interface", "enable-animations").map(|on| on == 0)
+}
+
+/// Whether "Animation effects" is off (Settings, Accessibility, Visual effects).
+#[cfg(all(windows, not(test)))]
+fn reduced_motion() -> Option<bool> {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        SPI_GETCLIENTAREAANIMATION, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS, SystemParametersInfoW,
+    };
+    use windows::core::BOOL;
+
+    let mut animations = BOOL(1);
+    // SAFETY: this setting is written to a BOOL.
+    unsafe {
+        SystemParametersInfoW(
+            SPI_GETCLIENTAREAANIMATION,
+            0,
+            Some((&raw mut animations).cast()),
+            SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS::default(),
+        )
+    }
+    .ok()?;
+    Some(!animations.as_bool())
 }

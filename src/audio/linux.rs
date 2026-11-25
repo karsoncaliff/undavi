@@ -11,7 +11,7 @@
 //! Apps are identified by a key from the stream's properties (see [`app_key`]),
 //! not by stream, so a choice survives the app restarting its playback.
 
-use super::player_matches;
+use super::{PlayingApp, Target, player_matches};
 use pipewire::{
     self as pw,
     context::ContextRc,
@@ -45,33 +45,6 @@ const STREAM_OUTPUT: &str = "Stream/Output/Audio";
 pub const RATE: u32 = 48_000;
 /// How long listing the playing apps may take before giving up.
 const LIST_TIMEOUT: Duration = Duration::from_millis(500);
-
-/// An app with at least one playback stream.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct PlayingApp {
-    /// Stable identifier (see [`app_key`]).
-    pub key: String,
-    /// Name to show, e.g. "Spotify".
-    pub label: String,
-}
-
-/// What an app capture records.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Target {
-    /// Nothing (yet).
-    None,
-    /// Every stream of the app with this key.
-    App(String),
-    /// Every stream of the app that matches this MPRIS player (see
-    /// [`player_matches`]).
-    Player {
-        /// The player's D-Bus name after `org.mpris.MediaPlayer2.`, e.g.
-        /// `spotify`, `firefox.instance_1_23` or `org.kde.elisa`.
-        bus: String,
-        /// The player's display name, e.g. "Mozilla Firefox".
-        identity: String,
-    },
-}
 
 /// Identifies the app behind a stream: its application name, else its
 /// executable, else the node name.

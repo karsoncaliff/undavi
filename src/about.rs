@@ -57,7 +57,11 @@ pub const CREDITS: &[Credit] = &[
     },
     Credit {
         title: "Track info and album art",
-        detail: "From your music player, over MPRIS.",
+        detail: if cfg!(windows) {
+            "From your music player, through the media controls in Windows."
+        } else {
+            "From your music player, over MPRIS."
+        },
         link: None,
     },
     Credit {
@@ -144,23 +148,59 @@ pub fn licenses() -> Vec<License> {
     out
 }
 
-/// Open `url` in the default browser, without waiting for it.
+/// Open `url` (or a folder) in the default browser (or file manager), without waiting
+/// for it.
 pub fn open_url(url: &str) {
     // Tests drive the real app; never let them launch a browser.
     if cfg!(test) {
         return;
     }
-    #[cfg(target_os = "windows")]
-    let result = std::process::Command::new("cmd")
-        .args(["/C", "start", "", url])
-        .spawn();
-    #[cfg(target_os = "macos")]
-    let result = std::process::Command::new("open").arg(url).spawn();
-    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
-    let result = std::process::Command::new("xdg-open").arg(url).spawn();
-    match result {
-        // Reap the launcher when it exits so it doesn't linger as a zombie.
-        Ok(mut child) => drop(std::thread::spawn(move || child.wait())),
-        Err(e) => eprintln!("undavi: couldn't open {url}: {e}"),
+    if let Err(e) = open(url) {
+        eprintln!("undavi: couldn't open {url}: {e}");
     }
+}
+
+#[cfg(not(windows))]
+fn open(url: &str) -> std::io::Result<()> {
+    let opener = if cfg!(target_os = "macos") {
+        "open"
+    } else {
+        "xdg-open"
+    };
+    let mut child = std::process::Command::new(opener).arg(url).spawn()?;
+    // Reap the launcher when it exits so it doesn't linger as a zombie.
+    std::thread::spawn(move || child.wait());
+    Ok(())
+}
+
+#[cfg(windows)]
+fn open(url: &str) -> std::io::Result<()> {
+    use windows::Win32::System::Com::{
+        COINIT_APARTMENTTHREADED, COINIT_DISABLE_OLE1DDE, CoInitializeEx, CoUninitialize,
+    };
+    use windows::Win32::UI::Shell::ShellExecuteW;
+    use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+    use windows::core::{HSTRING, w};
+
+    let url = HSTRING::from(url);
+    // Finding and starting the program can take a moment.
+    std::thread::Builder::new()
+        .name("undavi-open".into())
+        .spawn(move || {
+            // SAFETY: the strings outlive the call, and COM (which the shell may need)
+            // is only ended if it was started.
+            unsafe {
+                let com = CoInitializeEx(None, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+                let result = ShellExecuteW(None, w!("open"), &url, None, None, SW_SHOWNORMAL);
+                // It says so with a number up to 32.
+                if result.0 as usize <= 32 {
+                    let e = std::io::Error::last_os_error();
+                    eprintln!("undavi: couldn't open {url}: {e}");
+                }
+                if com.is_ok() {
+                    CoUninitialize();
+                }
+            }
+        })
+        .map(drop)
 }

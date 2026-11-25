@@ -16,7 +16,7 @@ cpal ─▶ Capture ─▶ ring buffer ─▶ Analyzer ─▶ Gate ─▶ Proces
   (`sink_default`), a WASAPI loopback of the default output on Windows, and the
   default input everywhere else (labeled "Default input" there). Other sources
   are outputs (their monitors) and inputs, as cpal lists them.
-- **Single apps (PipeWire).** An app source records only that app, so other
+- **Single apps (Linux).** An app source records only that app, so other
   sounds don't move the bars. cpal can't record another app's playback stream,
   so `audio::linux` does it with PipeWire directly: it opens its own capture
   stream (stereo `f32` at 48 kHz, not connected by the session manager) and
@@ -25,10 +25,21 @@ cpal ─▶ Capture ─▶ ring buffer ─▶ Analyzer ─▶ Gate ─▶ Proces
   and removed as the app's streams come and go, so apps with several streams
   (Spotify) or a new stream per playback (Firefox) are followed. Apps are matched
   by `application.name`, then the executable, then the node name.
-- **Music player.** The same, with the app chosen from the MPRIS player: its bus
-  name parts (without `org`, `instance…` and the like) and display name are
-  compared with the stream's application name and executable
+- **Single apps (Windows).** `audio::windows` uses WASAPI's process loopback
+  (stereo `f32` at 48 kHz), which records what a process and those it started play,
+  on whatever device. It looks for the app's audio sessions every 500 ms and opens
+  one for each process that has any, except those started by another one of them.
+  They all deliver steadily, silence included, so they're added up in step; one
+  that falls more than 100 ms behind counts as silent. Apps are matched by their
+  name: for packaged apps the one in the Start menu, for the rest the executable's
+  "File description", or else its file name.
+- **Music player.** The same, with the app chosen from the player. On Linux, its
+  MPRIS bus name parts (without `org`, `instance…` and the like) and display name
+  are compared with the stream's application name and executable
   (`audio::player_matches`), so following Spotify, then a browser tab, just works.
+  On Windows, the player's app ID leads to its executable and display name through
+  the Start menu (`audio::windows::player_names`). An app with exactly that name is
+  it; if there is none, the names are compared the same way as on Linux.
   When the target isn't playing, the stage says "Waiting for …" after 1.5 s.
 - **Format.** The device's default config. `i16`, `i32` and `f32` samples are
   converted to `f32` in -1.0..=1.0.

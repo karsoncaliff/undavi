@@ -5,9 +5,15 @@ and what a change needs before it's merged.
 
 ## Building
 
-You need Rust 1.90 or newer (install it with [rustup](https://rustup.rs)) and
-the development files for PipeWire, ALSA, D-Bus and the window system. Clang is
-needed because the PipeWire bindings are generated at build time.
+You need Rust 1.90 or newer (install it with [rustup](https://rustup.rs)).
+
+**Windows**
+
+Use the default (MSVC) toolchain. rustup offers to install the Visual Studio C++ build
+tools it needs; they include the Windows SDK.
+
+**Linux** also needs the development files for PipeWire, ALSA, D-Bus and the window
+system. Clang is needed because the PipeWire bindings are generated at build time.
 
 **Arch Linux**
 
@@ -37,8 +43,8 @@ cargo run              # debug build
 cargo run --release    # what users get; much smoother
 ```
 
-If colors or rendering look wrong, try the OpenGL backend to tell a driver issue
-from an app issue: `WGPU_BACKEND=gl cargo run --release`.
+If colors or rendering look wrong, try another graphics backend to tell a driver issue
+from an app issue: set `WGPU_BACKEND` to `gl` (or on Windows, `dx12` or `vulkan`).
 
 ## Where things are
 
@@ -50,7 +56,9 @@ src/
 tests/                integration tests of the public API
 docs/                 how things work (start with docs/architecture.md)
 assets/               fonts, icons, shaders, the wordmark
-packaging/            install script, PKGBUILD, desktop file, metainfo
+install.sh, .ps1      the install scripts for Linux and Windows
+packaging/            PKGBUILD, desktop file, metainfo, the Windows installer,
+                      third-party licenses
 vendor/iced_wgpu/     a patched iced renderer (see its PATCHED.md)
 dev/                  the project's to-do list and reference images
 ```
@@ -86,8 +94,8 @@ Two rules for tests:
 - **Never write the user's settings.** `settings::save` does nothing in unit
   tests, but integration tests build the library normally, so they must not
   call it.
-- **No devices or network.** Feed audio with `Analyzer::push`, parse lyrics from
-  strings.
+- **No devices, player or network.** Feed audio with `Analyzer::push`, parse lyrics
+  from strings.
 
 ## Before sending a change
 
@@ -98,11 +106,13 @@ cargo test
 RUSTDOCFLAGS="-D warnings" cargo doc --no-deps
 ```
 
+(In PowerShell, set it before: `$env:RUSTDOCFLAGS = '-D warnings'`.)
+
 GitHub Actions runs the same checks on every pull request
-(`.github/workflows/ci.yml`), plus a release build, the install script, the
-desktop and AppStream files, and a compile check on Windows and macOS. The
-Windows and macOS checks are informational until those platforms are supported.
-If you add a build dependency, add it to the workflow and the lists above.
+(`.github/workflows/ci.yml`), on Linux and Windows, plus a release build, the install
+scripts and the Windows installer, the desktop and AppStream files, and a compile check
+on macOS. The macOS check is informational until that platform is supported. If you add
+a build dependency, add it to the workflow and the lists above.
 
 - Public items in the public modules need doc comments; the build warns
   otherwise. [docs/writing-docs.md](docs/writing-docs.md) describes the format.

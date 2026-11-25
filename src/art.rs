@@ -4,10 +4,12 @@
 //! All heavy work runs on a worker thread. The UI polls [`ArtLoader::snapshot`] each frame.
 
 use crate::backdrop::Cover;
-use ::image::{RgbImage, imageops};
+use crate::media::Artwork;
+use ::image::{GenericImageView, RgbImage, imageops};
 use iced::widget::image::Handle;
+use std::borrow::Cow;
 use std::io::Read;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -51,8 +53,8 @@ struct Shared {
 
 pub struct ArtLoader {
     shared: Arc<Mutex<Shared>>,
-    requests: Sender<Option<String>>,
-    url: Option<String>,
+    requests: Sender<Option<Artwork>>,
+    wanted: Option<Artwork>,
 }
 
 impl ArtLoader {
@@ -66,22 +68,21 @@ impl ArtLoader {
         Self {
             shared,
             requests: tx,
-            url: None,
+            wanted: None,
         }
     }
 
-    /// Ask for the art at `url` (or none). Cheap to call every frame; only
-    /// changes are sent.
-    pub fn want(&mut self, url: Option<&str>) {
-        if self.url.as_deref() != url {
-            self.url = url.map(str::to_string);
-            let _ = self.requests.send(self.url.clone());
+    /// Ask for this art (or none). Cheap to call every frame; only changes are sent.
+    pub fn want(&mut self, art: Option<&Artwork>) {
+        if self.wanted.as_ref() != art {
+            self.wanted = art.cloned();
+            let _ = self.requests.send(self.wanted.clone());
         }
     }
 
     /// Load the current art again.
     pub fn reload(&self) {
-        let _ = self.requests.send(self.url.clone());
+        let _ = self.requests.send(self.wanted.clone());
     }
 
     pub fn snapshot(&self) -> Option<Arc<Art>> {
@@ -89,7 +90,7 @@ impl ArtLoader {
     }
 }
 
-fn worker(rx: Receiver<Option<String>>, shared: Arc<Mutex<Shared>>) {
+fn worker(rx: Receiver<Option<Artwork>>, shared: Arc<Mutex<Shared>>) {
     let agent: ureq::Agent = ureq::Agent::config_builder()
         .timeout_global(Some(Duration::from_secs(10)))
         .user_agent(crate::about::user_agent())
@@ -97,16 +98,20 @@ fn worker(rx: Receiver<Option<String>>, shared: Arc<Mutex<Shared>>) {
         .into();
     while let Ok(first) = rx.recv() {
         // Skipping through tracks: only the latest one matters.
-        let url = rx.try_iter().last().unwrap_or(first);
-        let art = url
-            .as_ref()
-            .and_then(|url| match fetch(&agent, url).and_then(decode) {
+        let wanted = rx.try_iter().last().unwrap_or(first);
+        let art = wanted.as_ref().and_then(|wanted| {
+            let (file, from) = match wanted {
+                Artwork::Url(url) => (fetch(&agent, url).map(Cow::Owned), url.as_str()),
+                Artwork::File(bytes) => (Ok(Cow::Borrowed(&**bytes)), "from the player"),
+            };
+            match file.and_then(|f| decode(&f)) {
                 Ok(img) => Some(Arc::new(Art::from_image(&img))),
                 Err(e) => {
-                    eprintln!("undavi: album art unavailable ({url}): {e}");
+                    eprintln!("undavi: album art unavailable ({from}): {e}");
                     None
                 }
-            });
+            }
+        });
         if let Ok(mut s) = shared.lock() {
             s.art = art;
         }
@@ -114,8 +119,8 @@ fn worker(rx: Receiver<Option<String>>, shared: Arc<Mutex<Shared>>) {
 }
 
 fn fetch(agent: &ureq::Agent, url: &str) -> Result<Vec<u8>, String> {
-    if let Some(path) = url.strip_prefix("file://") {
-        return read_file(Path::new(&percent_decode(path)), MAX_FILE);
+    if let Some(path) = file_path(url) {
+        return read_file(&path, MAX_FILE);
     }
     if url.starts_with("http://") || url.starts_with("https://") {
         let mut resp = agent.get(url).call().map_err(|e| e.to_string())?;
@@ -146,7 +151,7 @@ pub(crate) fn read_file(path: &Path, max: u64) -> Result<Vec<u8>, String> {
     Ok(bytes)
 }
 
-fn decode(bytes: Vec<u8>) -> Result<RgbImage, String> {
+fn decode(bytes: &[u8]) -> Result<RgbImage, String> {
     let mut reader = ::image::ImageReader::new(std::io::Cursor::new(bytes))
         .with_guessed_format()
         .map_err(|e| e.to_string())?;
@@ -155,13 +160,30 @@ fn decode(bytes: Vec<u8>) -> Result<RgbImage, String> {
     limits.max_image_height = Some(MAX_SIDE);
     limits.max_alloc = Some(MAX_DECODED);
     reader.limits(limits);
-    reader
-        .decode()
-        .map(|i| i.to_rgb8())
-        .map_err(|e| e.to_string())
+    let img = reader.decode().map_err(|e| e.to_string())?;
+    // Spotify's covers on Windows have a soft edge, one pixel wide and partly
+    // see-through, which would show as a light frame.
+    let (w, h) = img.dimensions();
+    let soft = img.color().has_alpha()
+        && w > 2
+        && h > 2
+        && (img.get_pixel(w / 2, 0).0[3] < 255 || img.get_pixel(0, h / 2).0[3] < 255);
+    Ok(if soft {
+        img.crop_imm(1, 1, w - 2, h - 2).to_rgb8()
+    } else {
+        img.to_rgb8()
+    })
 }
 
-pub(crate) fn percent_decode(s: &str) -> String {
+/// The file a `file://` URL is about.
+pub(crate) fn file_path(url: &str) -> Option<PathBuf> {
+    let path = percent_decode(url.strip_prefix("file://")?);
+    // Windows paths start with a drive: `file:///C:/Music`.
+    let drive = cfg!(windows) && path.starts_with('/') && path.as_bytes().get(2) == Some(&b':');
+    Some(PathBuf::from(if drive { &path[1..] } else { &path }))
+}
+
+fn percent_decode(s: &str) -> String {
     let bytes = s.as_bytes();
     let mut out = Vec::with_capacity(bytes.len());
     let mut i = 0;
@@ -346,8 +368,8 @@ pub fn pick_accent(img: &RgbImage) -> [u8; 3] {
         let bin = ((h / 360.0) * HUE_BINS as f32) as usize % HUE_BINS;
         let w = chroma.powf(1.5);
         weight[bin] += w;
-        for c in 0..3 {
-            sum[bin][c] += p.0[c] as f32 * w;
+        for (sum, value) in sum[bin].iter_mut().zip(p.0) {
+            *sum += value as f32 * w;
         }
     }
     // Less than 1% colorful pixels: treat the cover as black and white.
@@ -489,10 +511,28 @@ mod tests {
                 .unwrap();
             out.into_inner()
         };
-        assert_eq!(decode(png(40, 30)).unwrap().dimensions(), (40, 30));
-        assert!(decode(png(MAX_SIDE, 1)).is_ok());
-        assert!(decode(png(MAX_SIDE + 1, 1)).is_err());
-        assert!(decode(b"not a picture".to_vec()).is_err());
+        assert_eq!(decode(&png(40, 30)).unwrap().dimensions(), (40, 30));
+        assert!(decode(&png(MAX_SIDE, 1)).is_ok());
+        assert!(decode(&png(MAX_SIDE + 1, 1)).is_err());
+        assert!(decode(b"not a picture").is_err());
+    }
+
+    #[test]
+    fn soft_edges_are_cut_off() {
+        let png = |edge: u8| {
+            let mut img = ::image::RgbaImage::from_pixel(10, 8, ::image::Rgba([90, 0, 0, 255]));
+            for x in 0..10 {
+                img.put_pixel(x, 0, ::image::Rgba([250, 200, 200, edge]));
+            }
+            let mut out = std::io::Cursor::new(Vec::new());
+            img.write_to(&mut out, ::image::ImageFormat::Png).unwrap();
+            out.into_inner()
+        };
+        let img = decode(&png(184)).unwrap();
+        assert_eq!(img.dimensions(), (8, 6));
+        assert!(img.pixels().all(|p| p.0 == [90, 0, 0]));
+        // An opaque cover stays whole, alpha channel or not.
+        assert_eq!(decode(&png(255)).unwrap().dimensions(), (10, 8));
     }
 
     fn two_tone(a: [u8; 3], b: [u8; 3]) -> RgbImage {
@@ -593,5 +633,14 @@ mod tests {
     fn decodes_file_urls() {
         assert_eq!(percent_decode("/tmp/My%20Song.jpg"), "/tmp/My Song.jpg");
         assert_eq!(percent_decode("/a%2"), "/a%2");
+        let path = |url| file_path(url).map(|p| p.to_string_lossy().into_owned());
+        assert_eq!(path("file:///tmp/a%20b.jpg").unwrap(), "/tmp/a b.jpg");
+        assert_eq!(path("https://example.org/a.jpg"), None);
+        let on_a_drive = path("file:///C:/Music/a%20b.mp3").unwrap();
+        if cfg!(windows) {
+            assert_eq!(on_a_drive, "C:/Music/a b.mp3");
+        } else {
+            assert_eq!(on_a_drive, "/C:/Music/a b.mp3");
+        }
     }
 }

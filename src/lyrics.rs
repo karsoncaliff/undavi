@@ -23,7 +23,6 @@
 //! ```
 
 use std::collections::HashMap;
-use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -656,8 +655,7 @@ fn lookup(agent: &ureq::Agent, track: &Song) -> Option<Lyrics> {
 
 /// `song.lrc` next to `song.flac`, for local players.
 fn local_lrc(track: &Song) -> Option<Lyrics> {
-    let path = track.url.as_deref()?.strip_prefix("file://")?;
-    let path = PathBuf::from(crate::art::percent_decode(path)).with_extension("lrc");
+    let path = crate::art::file_path(track.url.as_deref()?)?.with_extension("lrc");
     let bytes = crate::art::read_file(&path, MAX_LRC).ok()?;
     let entries = parse_lrc(&String::from_utf8(bytes).ok()?);
     (!entries.is_empty()).then_some(Lyrics::Synced {

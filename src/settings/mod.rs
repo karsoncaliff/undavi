@@ -1026,8 +1026,10 @@ pub struct UpdateSettings {
     /// Ask GitHub for the latest release when Undavi starts.
     pub check: bool,
     /// Install a new release without asking first (only for copies installed
-    /// from a release tarball or `install.sh`; package managers handle their own).
+    /// with an install script; package managers handle their own).
     pub auto_install: bool,
+    /// Offer unstable versions too: pre-releases, made from the `dev` branch.
+    pub unstable: bool,
 }
 
 impl Default for UpdateSettings {
@@ -1035,6 +1037,7 @@ impl Default for UpdateSettings {
         Self {
             check: true,
             auto_install: false,
+            unstable: false,
         }
     }
 }

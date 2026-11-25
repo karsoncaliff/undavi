@@ -1,6 +1,6 @@
 [package]
 name = "undavi"
-version = "0.10.0"
+version = "1.0.0-alpha"
 edition = "2024"
 rust-version = "1.90"
 description = "A sound visualizer for your desktop, with media art, playback controls and synced lyrics"
@@ -50,6 +50,40 @@ dbus = "0.9"
 cpal = { version = "0.18.2", features = ["pipewire"] }
 # The same version cpal uses; for capturing single apps (see src/audio/linux.rs).
 pipewire = "0.10.1"
+
+[target.'cfg(windows)'.dependencies]
+# The same version cpal uses; for the media controls (see src/media/windows.rs), capturing
+# single apps (see src/audio/windows.rs) and a few other system calls.
+windows = { version = "0.62.2", features = [
+    "Foundation",
+    "Foundation_Collections",
+    "Media",
+    "Media_Control",
+    "Storage_Streams",
+    "Wdk_System_SystemServices",
+    "Win32_Foundation",
+    "Win32_Media_Audio",
+    "Win32_Media_Multimedia",
+    "Win32_Security",
+    "Win32_Security_Cryptography",
+    "Win32_Storage_Packaging_Appx",
+    "Win32_System_Com",
+    "Win32_System_Com_StructuredStorage",
+    "Win32_System_Console",
+    "Win32_System_Diagnostics_ToolHelp",
+    "Win32_System_SystemInformation",
+    "Win32_System_Threading",
+    "Win32_System_Variant",
+    "Win32_UI_Shell",
+    "Win32_UI_Shell_PropertiesSystem",
+    "Win32_UI_WindowsAndMessaging",
+] }
+# What `windows::core::implement` expands to.
+windows-core = "0.62.2"
+
+# Puts the icon and version details into undavi.exe (see build.rs).
+[target.'cfg(windows)'.build-dependencies]
+winresource = "0.1"
 
 [dev-dependencies]
 iced_test = "0.14"
