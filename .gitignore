@@ -2,5 +2,6 @@
 /dev
 /.idea
 /.vscode
+/.claude
 # Left by cargo in the copy of iced_wgpu.
 /vendor/iced_wgpu/.cargo-ok

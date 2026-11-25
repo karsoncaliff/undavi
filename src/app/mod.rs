@@ -3188,6 +3188,9 @@ mod tests {
         app.monitor_sections = MonitorSettings::default();
         // The same controls on any machine.
         app.platform = Platform::full();
+        // And the bars, even on one without sound: no "No audio input" in their place.
+        app.audio_error = None;
+        app.audio_down_since = None;
         // Colors eased from the user's saved settings would keep the app busy.
         app.accent = rgb_f(app.target_accent());
         app.bar_colors.clear();
