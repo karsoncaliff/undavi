@@ -13,7 +13,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/github/license/karsoncaliff/undavi" alt="License: GPL-3.0"></a>
 </p>
 
-<!-- Video Placeholder -->
+https://github.com/user-attachments/assets/113cb537-b453-4312-9901-2768c247f9f7
 
 ---
 
@@ -154,7 +154,7 @@ click the source button at the top to pick something else:
 
 Undavi remembers your choice.
 
-<!-- Video Placeholder -->
+https://github.com/user-attachments/assets/4d3b0ed7-97ae-42ae-b219-8fa4f2743f4a
 
 Click the Undavi logo for the About panel below it. If the song's info is stuck, the
 button next to the logo connects to your music player again, and looks for the cover and
@@ -198,7 +198,7 @@ beats and tempo, and lists the frame rate, audio source and player. It also sugg
 which slider to move when the bars sit too low, max out, or miss the beat. Each part
 can be hidden.
 
-<!-- Video Placeholder -->
+https://github.com/user-attachments/assets/19622230-3d25-403f-bfd1-58fe59f63e71
 
 ### Visualizer and Colors
 
@@ -208,7 +208,7 @@ segments, peak caps and glow (with a meter of the beat it follows). Everything i
 drawn on the GPU, and each visualizer has its own settings, declared in its shader
 (yours can too). The palette and the accent color are in Colors.
 
-<!-- Video Placeholder -->
+https://github.com/user-attachments/assets/82fd0dca-c728-4cf5-9f08-5ec6a7761231
 
 ### Background
 
@@ -228,7 +228,7 @@ timing, the keyboard shortcuts, how far a step of seeking or volume goes, what t
 does over the bars, when the controls hide, the frame rate, (where the desktop allows it)
 staying on top, and whether Undavi checks for updates and installs them.
 
-<!-- Video Placeholder -->
+https://github.com/user-attachments/assets/4f4a0219-77c5-40e9-aba1-8365805c0257
 
 ### Keyboard shortcuts
 
@@ -314,8 +314,8 @@ is built with [iced](https://iced.rs) and [cpal](https://github.com/RustAudio/cp
 ## Credits
 
 - [LRCLIB](https://lrclib.net): Lyric syncing
-- [Inter](https://rsms.me/inter/): UI font
+- [Inter](https://rsms.me/inter/): UI fonts
 - [Material Symbols](https://fonts.google.com/icons): UI icons
 - Dependencies: For their wonderful libraries
-- [Spicy Lyrics](https://github.com/spikerko/spicy-lyrics/): Inspiration for the lyrics features
-- [NCS](https://ncs.io/): The music played in the previews.
+- [Spicy Lyrics](https://github.com/spikerko/spicy-lyrics/): Inspiration for the lyric features
+- [NCS](https://ncs.io/): The music played in the previews
