@@ -6,7 +6,7 @@
 //! - Instrumental breaks show three dots that fill up over the break.
 //! - Scrolling is eased; clicking a line seeks to it.
 
-use crate::lyrics::{Entry, Lyrics, split_words};
+use crate::lyrics::{Entry, Line, Lyrics, Word, split_words};
 use crate::theme::{self, TEXT};
 use iced::advanced::text::Paragraph as _;
 use iced::alignment::Vertical;
@@ -62,6 +62,8 @@ pub struct LyricsView<'a, M> {
     pub font_size: f32,
     /// Strength of the glow on lit characters, 0..=1 (0 = off).
     pub glow: f32,
+    /// Fill words as they're sung; `false` lights whole lines, ignoring word timing.
+    pub word_sync: bool,
     pub on_seek: fn(f32) -> M,
 }
 
@@ -252,6 +254,18 @@ impl<M> LyricsView<'_, M> {
         }
     }
 
+    /// How far `word` is filled (0..=1) and when it stops being sung. Without word
+    /// timing, or with word sync turned off, the whole line lights up together (it
+    /// still eases in with the line's activeness).
+    fn word_fill(&self, line: &Line, word: &Word) -> (f32, f32) {
+        if line.word_synced && self.word_sync {
+            let p = ((self.time - word.start) / (word.end - word.start).max(0.01)).clamp(0.0, 1.0);
+            (p, word.end)
+        } else {
+            (if self.time >= line.start { 1.0 } else { 0.0 }, line.end)
+        }
+    }
+
     /// How "lit" entry `i` is: 1 while it's the current one, easing in and out.
     fn activeness(&self, i: usize) -> f32 {
         let entries = self.entries();
@@ -395,23 +409,14 @@ impl<M> canvas::Program<M> for LyricsView<'_, M> {
                         let mut pieces: Vec<Piece<'_>> = Vec::new();
                         for &(k, x, y, ww) in &item.words {
                             let word = &line.words[k];
-                            // Without word timing the whole line lights up together
-                            // (it still eases in with the line's activeness).
-                            let p = if line.word_synced {
-                                ((self.time - word.start) / (word.end - word.start).max(0.01))
-                                    .clamp(0.0, 1.0)
-                            } else if self.time >= word.start {
-                                1.0
-                            } else {
-                                0.0
-                            };
+                            let (p, end) = self.word_fill(line, word);
                             let label = word.text.trim();
                             let lift = LIFT * size * lit * (1.0 - (1.0 - p).powi(2));
                             let at = Point::new(x, top + y - lift);
                             let dim = edge * (resting + (UNSUNG_ALPHA - resting) * lit);
                             let bright = edge * (resting + (1.0 - resting) * lit);
                             // Full glow while being sung, then an afterglow that settles.
-                            let since = self.time - word.end;
+                            let since = self.time - end;
                             let word_glow = if since <= 0.0 {
                                 1.0
                             } else {
@@ -585,6 +590,7 @@ mod tests {
             placement: Placement::Column,
             font_size: 28.0,
             glow: 0.5,
+            word_sync: true,
             on_seek: |t| t,
         }
     }
@@ -602,6 +608,31 @@ mod tests {
         assert_eq!(lit(500.0), 1.0);
         // Earlier lines still fade out when the next one starts.
         assert_eq!(view(&lyrics, 6.0).activeness(last - 1), 0.0);
+    }
+
+    #[test]
+    fn word_sync_off_lights_whole_lines() {
+        let entries = parse_lrc("[00:01.00]<00:01.00>one <00:02.00>two\n[00:04.00]next");
+        let line = entries
+            .iter()
+            .find_map(|e| match e {
+                Entry::Line(l) if l.word_synced => Some(l.clone()),
+                _ => None,
+            })
+            .expect("a word-synced line");
+        let lyrics = Lyrics::Synced {
+            entries,
+            source: crate::lyrics::Source::Lrclib,
+        };
+        let second = &line.words[1];
+        // Word by word: halfway through "one", "two" hasn't started.
+        let by_word = view(&lyrics, 1.5);
+        assert_eq!(by_word.word_fill(&line, second).0, 0.0);
+        // Line sync: every word is lit as soon as the line starts.
+        let mut whole = view(&lyrics, 1.5);
+        whole.word_sync = false;
+        assert_eq!(whole.word_fill(&line, &line.words[0]), (1.0, line.end));
+        assert_eq!(whole.word_fill(&line, second), (1.0, line.end));
     }
 
     #[test]

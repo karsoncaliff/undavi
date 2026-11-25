@@ -82,9 +82,9 @@ jobs:
 
       - name: Install script
         run: |
-          shellcheck packaging/install.sh
+          shellcheck install.sh
           stage=$(mktemp -d)
-          DESTDIR="$stage" PREFIX=/usr packaging/install.sh
+          DESTDIR="$stage" PREFIX=/usr ./install.sh
           for file in bin/undavi share/applications/undavi.desktop \
                       share/metainfo/undavi.metainfo.xml \
                       share/icons/hicolor/scalable/apps/undavi.svg \

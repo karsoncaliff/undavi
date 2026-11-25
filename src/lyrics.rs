@@ -29,6 +29,8 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 const LRCLIB: &str = "https://lrclib.net/api";
+/// The biggest `.lrc` file read.
+const MAX_LRC: u64 = 2 * 1024 * 1024;
 /// A gap at least this long between lines shows the interlude dots.
 const INTERLUDE_MIN_S: f32 = 3.5;
 /// A search result's duration must be this close to the track's.
@@ -531,8 +533,15 @@ struct Shared {
 /// cached in memory for the session.
 pub struct LyricsLoader {
     shared: Arc<Mutex<Shared>>,
-    requests: Sender<Option<Song>>,
+    requests: Sender<Request>,
     wanted: Option<Song>,
+}
+
+/// The song to look up (or none).
+struct Request {
+    song: Option<Song>,
+    /// Look again, whatever was found before.
+    again: bool,
 }
 
 impl LyricsLoader {
@@ -558,8 +567,19 @@ impl LyricsLoader {
     pub fn want(&mut self, track: Option<Song>) {
         if self.wanted != track {
             self.wanted = track.clone();
-            let _ = self.requests.send(track);
+            let _ = self.requests.send(Request {
+                song: track,
+                again: false,
+            });
         }
+    }
+
+    /// Look for the wanted track's lyrics again, even if there were none before.
+    pub fn retry(&self) {
+        let _ = self.requests.send(Request {
+            song: self.wanted.clone(),
+            again: true,
+        });
     }
 
     /// Lyrics for the wanted track, if they've arrived.
@@ -572,7 +592,7 @@ impl LyricsLoader {
     }
 }
 
-fn worker(rx: Receiver<Option<Song>>, shared: Arc<Mutex<Shared>>) {
+fn worker(rx: Receiver<Request>, shared: Arc<Mutex<Shared>>) {
     let agent: ureq::Agent = ureq::Agent::config_builder()
         .timeout_global(Some(Duration::from_secs(10)))
         .user_agent(crate::about::user_agent())
@@ -582,12 +602,19 @@ fn worker(rx: Receiver<Option<Song>>, shared: Arc<Mutex<Shared>>) {
     // Session-only cache so replaying a song doesn't refetch. Never written to disk.
     let mut cache: HashMap<Song, Option<Arc<Lyrics>>> = HashMap::new();
 
-    while let Ok(mut track) = rx.recv() {
+    while let Ok(mut request) = rx.recv() {
         // Skip tracks that were already replaced by a newer request.
         while let Ok(newer) = rx.try_recv() {
-            track = newer;
+            let same = newer.song == request.song;
+            request = Request {
+                again: newer.again || (same && request.again),
+                ..newer
+            };
         }
-        let Some(track) = track else {
+        if let (true, Some(song)) = (request.again, &request.song) {
+            cache.remove(song);
+        }
+        let Some(track) = request.song else {
             if let Ok(mut s) = shared.lock() {
                 s.track = None;
                 s.status = Status::NotFound;
@@ -631,8 +658,8 @@ fn lookup(agent: &ureq::Agent, track: &Song) -> Option<Lyrics> {
 fn local_lrc(track: &Song) -> Option<Lyrics> {
     let path = track.url.as_deref()?.strip_prefix("file://")?;
     let path = PathBuf::from(crate::art::percent_decode(path)).with_extension("lrc");
-    let text = std::fs::read_to_string(path).ok()?;
-    let entries = parse_lrc(&text);
+    let bytes = crate::art::read_file(&path, MAX_LRC).ok()?;
+    let entries = parse_lrc(&String::from_utf8(bytes).ok()?);
     (!entries.is_empty()).then_some(Lyrics::Synced {
         entries,
         source: Source::File,

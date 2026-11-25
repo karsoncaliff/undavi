@@ -1,6 +1,6 @@
 [package]
 name = "undavi"
-version = "0.9.0"
+version = "0.10.0"
 edition = "2024"
 rust-version = "1.90"
 description = "A sound visualizer for your desktop, with media art, playback controls and synced lyrics"
@@ -39,11 +39,16 @@ serde_json = "1"
 dirs = "7.0.0"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
 ureq = { version = "3", features = ["json"] }
+# The same version wgpu uses; checks custom background shaders before they reach
+# the GPU (see src/shaders/mod.rs).
+naga = { version = "27.0.3", features = ["wgsl-in"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 mpris = "2.1.0"
+# The same version mpris uses; for the reduced-motion setting (see src/platform.rs).
+dbus = "0.9"
 cpal = { version = "0.18.2", features = ["pipewire"] }
-# The same version cpal uses; for capturing single apps (see src/audio/apps.rs).
+# The same version cpal uses; for capturing single apps (see src/audio/linux.rs).
 pipewire = "0.10.1"
 
 [dev-dependencies]

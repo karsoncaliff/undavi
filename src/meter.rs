@@ -1,11 +1,9 @@
-//! The tuning meter: live input level, gate, level range and beats, shown over the
-//! bars while the Tuning panel is open so its sliders have something to point at.
+//! The level meter: live input level, gate, level range and beats, at the top of the
+//! settings window's Sound section so its sliders have something to point at.
 
 use crate::app::{App, Message};
 use crate::settings::GATE_OFF;
-use crate::theme::{
-    self, INTER_MEDIUM, INTER_SEMIBOLD, TEXT, TEXT_2, TEXT_3, TRACK, tracked, with_alpha,
-};
+use crate::theme::{INTER_MEDIUM, TEXT, TEXT_2, TEXT_3, TRACK, with_alpha};
 use iced::mouse::Cursor;
 use iced::widget::canvas::{self, Frame, Geometry, Path};
 use iced::widget::{Canvas, column, container, row, text};
@@ -13,7 +11,6 @@ use iced::{Alignment, Color, Element, Length, Point, Rectangle, Renderer, Size, 
 
 /// Meters span this range, in dB.
 const DB_RANGE: (f32, f32) = (-100.0, 0.0);
-const WIDTH: f32 = 300.0;
 const LABEL_W: f32 = 56.0;
 const VALUE_W: f32 = 64.0;
 /// The beat dot lights up above this pulse.
@@ -44,7 +41,7 @@ struct Bar {
     /// Fill, 0..=1.
     value: f32,
     color: Color,
-    /// Shaded range behind the fill (the Tuning level range), 0..=1.
+    /// Shaded range behind the fill (the level range), 0..=1.
     band: Option<(f32, f32)>,
     /// A tick across the bar (the gate threshold), 0..=1.
     marker: Option<f32>,
@@ -154,9 +151,23 @@ fn value<'a>(s: String) -> Element<'a, Message> {
 }
 
 impl App {
-    /// The meter card shown over the bars while Tuning is open.
-    pub(crate) fn tuning_meter(&self) -> Element<'_, Message> {
-        let t = &self.tuning;
+    /// The beat: how strong it is now, and a light that comes on when it hits. (Also
+    /// under the switches of what follows it.)
+    pub(crate) fn beat_meter(&self, pulse: f32) -> Element<'_, Message> {
+        let color = self.accent();
+        let beat = Bar {
+            value: pulse,
+            color,
+            band: None,
+            marker: None,
+        };
+        let light = Canvas::new(Dot { pulse, color }).width(14).height(CANVAS_H);
+        meter_row("Beat", bar(beat), light.into())
+    }
+
+    /// The meter, for the Sound section.
+    pub(crate) fn level_meter(&self) -> Element<'_, Message> {
+        let t = &self.sections.sound;
         let accent = self.accent();
         let m = self.meter;
         let gate_on = t.gate_db > GATE_OFF;
@@ -176,14 +187,6 @@ impl App {
             band: Some((db_pos(t.floor_db as f32), db_pos(t.ceiling_db as f32))),
             marker: None,
         };
-        let pulse = self.beat.pulse();
-        let beat = Bar {
-            value: pulse,
-            color: accent,
-            band: None,
-            marker: None,
-        };
-
         let mut status = vec![if m.input_db.is_none() {
             "No audio".to_string()
         } else if sound {
@@ -197,32 +200,13 @@ impl App {
             status.push(format!("Auto-gain \u{00D7}{:.1}", self.processor.gain()));
         }
 
-        container(
-            column![
-                text(tracked("Meter"))
-                    .font(INTER_SEMIBOLD)
-                    .size(11)
-                    .color(TEXT_3),
-                meter_row("Input", bar(input), value(db_text(m.input_db))),
-                meter_row("Bars", bar(bars), value(db_text(m.loudest_db))),
-                meter_row(
-                    "Beat",
-                    bar(beat),
-                    Canvas::new(Dot {
-                        pulse,
-                        color: accent
-                    })
-                    .width(14)
-                    .height(CANVAS_H)
-                    .into(),
-                ),
-                text(status.join("  \u{00B7}  ")).size(12).color(TEXT_3),
-            ]
-            .spacing(8),
-        )
-        .width(WIDTH)
-        .padding([14, 16])
-        .style(theme::panel_translucent)
+        column![
+            meter_row("Input", bar(input), value(db_text(m.input_db))),
+            meter_row("Bars", bar(bars), value(db_text(m.loudest_db))),
+            self.beat_meter(self.beat.pulse()),
+            text(status.join("  \u{00B7}  ")).size(12).color(TEXT_3),
+        ]
+        .spacing(8)
         .into()
     }
 }

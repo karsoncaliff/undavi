@@ -21,5 +21,12 @@ anti-aliased edges of full-color SVGs (Undavi's wordmark) came out with a dark
 fringe. The patch un-premultiplies the pixels before uploading them. Tinted
 SVGs (icons) were already fine, since their color is replaced anyway.
 
+3. `src/image/mod.rs`, placing SVGs: an SVG is rasterized at its size rounded up to
+whole pixels, then drawn with each of its edges rounded to the screen's pixels,
+which can come out one pixel wider or narrower (an SVG centered at half a pixel).
+Sampled with the nearest pixel, that repeated or dropped a row or column of it: a
+thicker stem in the "n" of Undavi's wordmark. The patch draws it from a whole
+pixel, at the size it was rasterized.
+
 Drop this copy (and the `[patch.crates-io]` entry) once upstream iced fixes
-both.
+all three.

@@ -31,7 +31,7 @@ cargo test snapshots -- --ignored        # then look through target/snapshots/
 ```
 
 Then run the release build (`cargo run --release`) and try it with real music:
-System Audio, an app, Music player, each panel, lyrics, full screen, and a
+System Audio, an app, Music player, the settings window, lyrics, full screen, and a
 narrow window.
 
 ## 3. Tag
@@ -39,8 +39,8 @@ narrow window.
 Commit, push to `main`, and wait for CI to pass. Then:
 
 ```sh
-git tag -a v0.9.0 -m "Undavi 0.9.0"
-git push origin v0.9.0
+git tag -a v0.10.0 -m "Undavi 0.10.0"
+git push origin v0.10.0
 ```
 
 The **Release** workflow checks that the tag matches `Cargo.toml`, runs the
@@ -59,7 +59,7 @@ notes.
    updpkgsums                         # fill in the checksum of the tagged source
    makepkg -si                        # build, test and install it once
    makepkg --printsrcinfo > .SRCINFO
-   git commit -am "Update to 0.9.0" && git push
+   git commit -am "Update to 0.10.0" && git push
    ```
 
    Copy the updated checksum back into `packaging/aur/PKGBUILD` in this
@@ -72,7 +72,7 @@ Fedora 40, Debian 13, Linux Mint 22, and current Arch, openSUSE Tumbleweed and
 their derivatives. Older systems build from source. Users install it with:
 
 ```sh
-tar xf undavi-0.9.0-x86_64-linux.tar.gz
-cd undavi-0.9.0-x86_64-linux
-sudo packaging/install.sh
+tar xf undavi-0.10.0-x86_64-linux.tar.gz
+cd undavi-0.10.0-x86_64-linux
+sudo ./install.sh
 ```

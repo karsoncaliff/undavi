@@ -13,7 +13,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/github/license/karsoncaliff/undavi" alt="License: GPL-3.0"></a>
 </p>
 
-https://github.com/user-attachments/assets/aaf0d770-fbcc-4a4b-94b2-1f113691ff23
+<!-- Video Placeholder -->
 
 ---
 
@@ -23,28 +23,42 @@ https://github.com/user-attachments/assets/aaf0d770-fbcc-4a4b-94b2-1f113691ff23
   app such as Spotify or Firefox, whichever app your music player is, a specific
   output, or a microphone. Reconnects by itself if the device or audio server goes
   away.
-- **Three styles:** bars, a ring of bars around the spinning album cover, or a
-  smooth wave. Mirror them, split them into left/right or mid/side, add
-  segments and peak caps, and color them with built-in palettes, your own
+- **Three visualizers:** bars, a ring of bars around the spinning album cover, or a
+  smooth wave. Mirror them, split them into left/right or mid/side, add segments,
+  peak caps and a glow on the beat, and color them with built-in palettes, your own
   gradient, or colors taken from the album art.
+- **Backgrounds** of blurred album art, soft ambient color or a solid color. The
+  art and the ambient color can drift, rotate or flow like liquid, and pulse with
+  the bass or drums. Color effects, a vignette and film grain go over any of them.
+- **Your own shaders,** for visualizers and backgrounds alike. A
+  [WGSL file](docs/shaders.md) can follow the music, add its own sliders and
+  switches to the settings, and reloads when you save it. Start from a copy of a
+  built-in one, or from the five examples.
 - **Synced lyrics,** word by word when available, from
   [LRCLIB](https://lrclib.net) or a `.lrc` file next to the song. Click a line
   to jump to it.
 - **Now playing:** title, artist and cover in the header, as a large spotlight
   beside the bars, or as one small line. Play, pause, skip, seek, repeat and
   volume work with your music player.
-- **Backgrounds** of blurred album art, soft ambient color or a solid color,
-  slowly moving, and pulsing with the bass or drums if you like.
+- **Playback bar:** on the background, in a card or docked along the bottom, full or
+  compact, with the seek bar's curve, lines and handle the way you like them.
+- **Live preview:** the settings show the whole screen as you change it, in the
+  shape of a regular window, an ultrawide screen or a narrow window. You can also
+  search the settings, undo one you changed, and Cancel puts everything back.
+- **Presets** for each section of the settings, built-in and your own, to mix and
+  match, and groups of them to switch several sections at once.
+- **Quick settings:** star the settings you change most, and they're one click away.
 - **Fine tuning:** sensitivity, spread, rise and fall times, gravity, level range,
   contrast, frequency range and scale (log, mel, linear), a three-band EQ,
   auto-gain, a noise gate, beat sensitivity and a visual delay for Bluetooth
-  audio, with a live meter that shows what the sliders are doing. Or press
-  Auto-calibrate.
-- **Presets** for each panel, so you can switch looks in one click.
+  audio. A live meter and a signal monitor show what the sliders are doing. Or
+  press Auto-calibrate.
 - **Easy on the battery:** drawing slows to a crawl when nothing is moving, the
   frame rate can be capped, and silence can freeze the bars.
 - **Keyboard friendly:** every control is reachable with Tab and adjustable with
-  the arrow keys.
+  the arrow keys, and every shortcut can be changed.
+- **Updates:** Undavi tells you about new releases and can install them for you
+  (with pacman, it leaves that to pacman). You can turn this off.
 
 ## Requirements
 
@@ -79,6 +93,8 @@ playback controls there, and macOS can't capture system audio.
 
 ## Installing
 
+Already have 0.9.0? It can't update itself, so see [MIGRATING.md](MIGRATING.md).
+
 ### Download
 
 Each [release](https://github.com/karsoncaliff/undavi/releases) has a ready-made
@@ -86,10 +102,17 @@ build for 64-bit PCs, for distributions with glibc 2.39 or newer (Ubuntu 24.04,
 Fedora 40, Debian 13, Linux Mint 22, Arch and newer):
 
 ```sh
-tar xf undavi-0.9.0-x86_64-linux.tar.gz
-cd undavi-0.9.0-x86_64-linux
-sudo packaging/install.sh
+tar xf undavi-0.10.0-x86_64-linux.tar.gz
+cd undavi-0.10.0-x86_64-linux
+sudo ./install.sh
 ```
+
+**Sudo is required for**
+- Copying the executable into `/usr/local/bin`.
+- Installing desktop shortcuts, icons, and license files.
+- Removing those same files when uninstalling.
+
+If you have any concerns, you can view the installation script [here](install.sh).
 
 ### Arch Linux
 
@@ -108,12 +131,16 @@ Install Rust and the build dependencies listed in
 git clone https://github.com/karsoncaliff/undavi
 cd undavi
 cargo build --release --locked
-sudo packaging/install.sh
+sudo ./install.sh
 ```
 
 Either way, Undavi is installed to `/usr/local` with its menu entry and icons.
-Run `undavi` or find it in your app launcher. To remove it, run
-`sudo packaging/install.sh --uninstall` from the same folder.
+Run `undavi` or find it in your app launcher. 
+
+### Uninstalling
+
+To remove it, run
+`sudo ./install.sh --uninstall` from the same folder.
 
 ## Using Undavi
 
@@ -127,42 +154,97 @@ click the source button at the top to pick something else:
 
 Undavi remembers your choice.
 
-https://github.com/user-attachments/assets/05674d5f-cc36-4b51-bfb2-3cb30b21ec6b
+<!-- Video Placeholder -->
 
-The three buttons at the top right open the side panels. Click the Undavi logo
-for the About panel. The controls fade out when the mouse is still and come back
-when you move it.
+Click the Undavi logo for the About panel below it. If the song's info is stuck, the
+button next to the logo connects to your music player again, and looks for the cover and
+the lyrics anew. The controls fade out when the mouse is still and come back when you
+move it.
 
-### Tuning
+The sliders button next to the gear (or Q) opens the **quick settings**: the settings
+you've starred in the settings window.
+
+### The settings window
+
+The gear at the top right (or S) opens the settings. Every change applies right
+away, to the app behind the window and to the live preview beside the settings.
+**Done** (or Esc) keeps your changes, and **Cancel** puts everything back the way
+it was when you opened it.
+
+- **Find things** in the tree on the left, or with the search above it: Enter goes to
+  the setting that matches best. The arrows fold sections, and the groups in them,
+  away; the button above the search expands or collapses every section.
+- **Stars:** the star in front of a setting puts it in the quick settings. (Cancel
+  leaves the stars as they are.)
+- **Undo:** a setting you changed has an undo button next to its name, and then one
+  to redo it. Loading a preset is a new start.
+- **Presets:** each section has its own. Pick one from the menu at the top right of
+  the section, or save your own there; rename, reorder and delete yours with the
+  pencil. **Presets**, at the end of the tree, lists all of them, and is where you make
+  preset groups: a preset for each section you like, loaded together.
+- **Preview:** the whole screen in the shape of a regular window, an ultrawide
+  screen or a narrow window, or only the part the section affects. **Peek at full
+  size** hides the settings for a look at the real thing.
+
+### Sound
 
 How the bars react to sound: sensitivity, speed, gravity, the level and
 frequency ranges, EQ, auto-gain, the noise gate, beats and a visual delay. A live
-meter shows what the sliders are working with while the panel is open.
+meter shows what the sliders are working with.
 
-https://github.com/user-attachments/assets/fedd0698-02ad-4055-898b-51e841b00bc9
+For a closer look, turn on the signal monitor below it. It graphs the input level
+against the noise gate and level range, the spectrum with the bars laid over it, and
+beats and tempo, and lists the frame rate, audio source and player. It also suggests
+which slider to move when the bars sit too low, max out, or miss the beat. Each part
+can be hidden.
 
-### Visuals
+<!-- Video Placeholder -->
 
-How the bars look: bars, a ring around the cover, or a wave; mirroring and
-stereo or mid/side split; segments, peak caps, colors and glow.
+### Visualizer and Colors
 
-https://github.com/user-attachments/assets/44707b18-74da-44a6-a1d7-0af56a35a9f0
+How the bars look: bars, a ring around the cover, a wave, or a [visualizer
+shader of your own](docs/shaders.md); mirroring and stereo or mid/side split;
+segments, peak caps and glow (with a meter of the beat it follows). Everything is
+drawn on the GPU, and each visualizer has its own settings, declared in its shader
+(yours can too). The palette and the accent color are in Colors.
 
-### Appearance
+<!-- Video Placeholder -->
 
-The background, how the current track is shown, lyrics, the accent color and the
-window.
+### Background
 
-https://github.com/user-attachments/assets/e6c1f41a-5f51-4cd2-b4f2-3570a6738fb6
+The picture behind the bars: a solid color, the album art, soft Ambient circles
+in the cover's colors, or a [shader of your own](docs/shaders.md). The album art
+can be three moving copies of the cover, one large cover or a grid of tiles that
+stay still, drift or rotate, or come alive with an animated Liquid, Warp or
+Spiral effect, at the speed and zoom you like, with a beat pulse that swells,
+brightens, zooms or brings the art into focus. Effects go over any of them: dim,
+saturation, brightness, contrast, an accent tint, a vignette and film grain.
+
+### Now playing, Playback bar, Lyrics, Controls and General
+
+How the current track is shown, how the playback bar looks (its style, what's in it,
+and the seek bar's curve, thickness, handle and times), the lyrics' size, glow and
+timing, the keyboard shortcuts, how far a step of seeking or volume goes, what the mouse
+does over the bars, when the controls hide, the frame rate, (where the desktop allows it)
+staying on top, and whether Undavi checks for updates and installs them.
+
+<!-- Video Placeholder -->
 
 ### Keyboard shortcuts
+
+These are the shortcuts to start with. Change them, or add ones for the previous and next
+track, the volume and more, under Controls in the settings.
 
 | Key | Does |
 |---|---|
 | Space | Play or pause |
 | ← / → | Seek 5 seconds back or forward |
 | F or F11 | Full screen (or double-click the bars) |
-| T, V, A | Open or close Tuning, Visuals, Appearance |
+| S | Open or close the settings |
+| Q | Open or close the quick settings |
+| T, V, B, I | Open the settings at Sound, Visualizer, Background, General |
+| R | Refresh the song's info |
+| Ctrl + D | Star the setting that has the focus |
 | Esc | Close whatever is open, then leave full screen |
 | Tab / Shift+Tab | Move between controls |
 | ← → ↑ ↓, Page Up/Down, Home/End | Adjust the focused control |
@@ -170,12 +252,14 @@ https://github.com/user-attachments/assets/e6c1f41a-5f51-4cd2-b4f2-3570a6738fb6
 
 ## Privacy
 
-Undavi has no accounts, ads or telemetry. It only goes online for two things:
+Undavi has no accounts, ads or telemetry. It only goes online for three things:
 
 - **Lyrics:** the title, artist, album and length of the song that's playing are
   sent to [lrclib.net](https://lrclib.net). Lyrics are kept in memory while Undavi
   runs and never saved to disk.
 - **Album art:** downloaded from the address your music player provides.
+- **Updates:** when Undavi starts, it asks GitHub for the latest release. Turn
+  this off in the settings (General), or with "Don't ask again" in the update pop-up.
 
 ## Settings
 
@@ -183,6 +267,19 @@ Settings and presets are saved automatically in
 `~/.config/undavi/settings.json` (`%APPDATA%\undavi` on Windows,
 `~/Library/Application Support/undavi` on macOS). To start over, quit Undavi and
 delete that file.
+
+## Roadmap
+
+Undavi is a personal project, so there are no dates. Items move up
+or down depending on bug reports and what people ask for.
+
+The full roadmap for future features can be found [here](ROADMAP.md).
+
+### In Development
+- [ ] Static effects that don't depend on audio. (LFO)
+- [ ] Particles in the background with custom effects.
+- [ ] Reactions (When X, do Y).
+- [ ] Modulation grid.
 
 ## Troubleshooting
 
@@ -209,6 +306,16 @@ only](LICENSE), with the additional terms in [NOTICE](NOTICE). The Undavi name
 and logo are covered by the [trademark policy](TRADEMARKS.md): forks are welcome,
 under their own name.
 
-Undavi uses lyrics from [LRCLIB](https://lrclib.net) and the
-[Inter](https://rsms.me/inter/) typeface (SIL Open Font License 1.1), and is
-built with [iced](https://iced.rs) and [cpal](https://github.com/RustAudio/cpal).
+Undavi uses lyrics from [LRCLIB](https://lrclib.net), the
+[Inter](https://rsms.me/inter/) typeface (SIL Open Font License 1.1) and
+[Material Symbols](https://fonts.google.com/icons) icons (Apache License 2.0), and
+is built with [iced](https://iced.rs) and [cpal](https://github.com/RustAudio/cpal).
+
+## Credits
+
+- [LRCLIB](https://lrclib.net): Lyric syncing
+- [Inter](https://rsms.me/inter/): UI font
+- [Material Symbols](https://fonts.google.com/icons): UI icons
+- Dependencies: For their wonderful libraries
+- [Spicy Lyrics](https://github.com/spikerko/spicy-lyrics/): Inspiration for the lyrics features
+- [NCS](https://ncs.io/): The music played in the previews.

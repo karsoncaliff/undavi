@@ -18,7 +18,7 @@ cpal ─▶ Capture ─▶ ring buffer ─▶ Analyzer ─▶ Gate ─▶ Proces
   are outputs (their monitors) and inputs, as cpal lists them.
 - **Single apps (PipeWire).** An app source records only that app, so other
   sounds don't move the bars. cpal can't record another app's playback stream,
-  so `audio::apps` does it with PipeWire directly: it opens its own capture
+  so `audio::linux` does it with PipeWire directly: it opens its own capture
   stream (stereo `f32` at 48 kHz, not connected by the session manager) and
   links the output ports of every playback stream (`Stream/Output/Audio`) whose
   app matches. PipeWire mixes several links into one input, and links are added
@@ -28,7 +28,7 @@ cpal ─▶ Capture ─▶ ring buffer ─▶ Analyzer ─▶ Gate ─▶ Proces
 - **Music player.** The same, with the app chosen from the MPRIS player: its bus
   name parts (without `org`, `instance…` and the like) and display name are
   compared with the stream's application name and executable
-  (`apps::player_matches`), so following Spotify, then a browser tab, just works.
+  (`audio::player_matches`), so following Spotify, then a browser tab, just works.
   When the target isn't playing, the stage says "Waiting for …" after 1.5 s.
 - **Format.** The device's default config. `i16`, `i32` and `f32` samples are
   converted to `f32` in -1.0..=1.0.
@@ -47,8 +47,8 @@ cpal ─▶ Capture ─▶ ring buffer ─▶ Analyzer ─▶ Gate ─▶ Proces
 
 - **History.** 131,072 samples per side: the largest FFT plus 500 ms of visual
   delay at up to 192 kHz.
-- **Window.** The latest `size` samples, ending `delay` samples ago (Tuning →
-  Visual delay), with a Hann window. `size` is 2048, 4096 or 8192 (Tuning →
+- **Window.** The latest `size` samples, ending `delay` samples ago (Sound →
+  Visual delay), with a Hann window. `size` is 2048, 4096 or 8192 (Sound →
   Detail: Fast, Balanced, Detailed).
 - **Spectrum.** A real FFT, scaled by `2 / sum(window)` so a full-scale sine reads
   0 dBFS, then `20·log10` with a floor at -140 dB. The mix is always computed;
@@ -62,7 +62,7 @@ cpal ─▶ Capture ─▶ ring buffer ─▶ Analyzer ─▶ Gate ─▶ Proces
 
 Decides whether there is sound to show.
 
-- Opens as soon as the level reaches the threshold (Tuning → Noise gate,
+- Opens as soon as the level reaches the threshold (Sound → Noise gate,
   -100 to -30 dB; the lowest position turns the gate off).
 - Closes once the level has stayed more than 3 dB below the threshold for 250 ms,
   so short gaps between notes and a level hovering at the threshold don't
@@ -78,13 +78,13 @@ is free to go idle.
 One `Processor` turns one or two spectra into one value per bar (with Left/right
 split, the left half's values come first). Per frame:
 
-1. **Bin.** The frequency range (Tuning → Range, 20 Hz to 20 kHz) is cut into one
+1. **Bin.** The frequency range (Sound → Range, 20 Hz to 20 kHz) is cut into one
    band per bar along the frequency scale: equal octaves (Log), equal mels (Mel),
    or equal Hz (Linear). A band covering several FFT bins takes the loudest bin
-   or the average power (Tuning → Bar value); a band narrower than one bin
+   or the average power (Sound → Bar value); a band narrower than one bin
    interpolates at its center.
 2. **Tilt.** `tilt × log2(center / 1 kHz)` dB, pivoting at 1 kHz.
-3. **Normalize.** The level range (Tuning → Level range) maps floor..ceiling to
+3. **Normalize.** The level range (Sound → Level range) maps floor..ceiling to
    0..1, then the contrast curve raises it to `2^((contrast − 50) / 50)`
    (0.5 to 2).
 4. **EQ.** Bass, mids and highs bands are Gaussians centered at 0.08, 0.45 and
@@ -93,7 +93,7 @@ split, the left half's values come first). Per frame:
 5. **Sensitivity.** Multiplies by 0.35 + 0.65 × sensitivity / 100.
 6. **Spread.** A Gaussian blur across neighboring bars with σ = spread / 100 × 2.5
    bars, never across the two halves of a split.
-7. **Silence.** With no input, Tuning → When it's silent decides: *Fade out* keeps
+7. **Silence.** With no input, Sound → When it's silent decides: *Fade out* keeps
    the targets at zero, *Idle wave* sets them to a slow wave 12% high, and
    *Freeze* stops here and leaves everything as it was.
 8. **Rise and fall.** Each bar eases toward its target with time constant
@@ -114,7 +114,7 @@ something in it (at least ten frames), and picks the Sensitivity that puts their
 
 ## 5. Beats (`spectrum::BeatGlow`)
 
-Two detectors, chosen per effect (Visuals → Glow, Appearance → Pulse with the
+Two detectors, chosen per effect (Visualizer → Glow, Background → Pulse with the
 beat). Both read the mix spectrum and give a pulse in 0..1.
 
 - **Bass** compares the 30–150 Hz power with its own recent average (1.5 s) and
@@ -125,7 +125,7 @@ beat). Both read the mix spectrum and give a pulse in 0..1.
   times a ratio; snare hits count 75%. Hits are at least 110 ms apart, and the
   pulse decays with a 150 ms time constant.
 
-**Beat sensitivity** (Tuning → Beats) sets the bar for a hit. For drums, the
+**Beat sensitivity** (Sound → Beats) sets the bar for a hit. For drums, the
 ratio goes from 2.4× (0) through 1.6× (50) to 1.25× (100). For bass, below 50 the
 bottom part of each swell is ignored (up to half of it); above 50, swells count
 up to twice as much.

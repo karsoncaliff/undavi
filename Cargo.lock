@@ -4793,14 +4793,16 @@ dependencies = [
 
 [[package]]
 name = "undavi"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "cpal",
+ "dbus",
  "dirs",
  "iced",
  "iced_test",
  "image",
  "mpris",
+ "naga",
  "pipewire",
  "realfft",
  "ringbuf",

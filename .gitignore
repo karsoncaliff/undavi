@@ -1,5 +1,6 @@
 /target
+/dev
 /.idea
 /.vscode
-# Screen recordings for the README: uploaded to GitHub, too large for the repo.
-/assets/undavi/*.mp4
+# Left by cargo in the copy of iced_wgpu.
+/vendor/iced_wgpu/.cargo-ok

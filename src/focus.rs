@@ -7,6 +7,7 @@
 //! last view, so the view stays the single src of truth for focus order.
 
 use std::cell::RefCell;
+use std::ops::Range;
 use std::rc::Rc;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -16,13 +17,37 @@ pub enum FocusId {
     Indexed(&'static str, usize),
 }
 
-/// Where a control lives. Tab stays inside the picker while it's open, and panel
-/// controls scroll into view when focused.
+impl From<&'static str> for FocusId {
+    fn from(name: &'static str) -> Self {
+        FocusId::Named(name)
+    }
+}
+
+/// Where a control lives. Tab stays inside the picker, the settings window or a
+/// pop-up while it's open, and the controls of a panel or of the settings window's
+/// content scroll into view when focused.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Scope {
     Main,
     Panel,
     Picker,
+    /// The quick settings.
+    Quick,
+    /// The update pop-up.
+    Dialog,
+    /// The settings window's navigation tree, the fixed parts of its content (header
+    /// and footer), the content that scrolls between them, and the preview.
+    Tree,
+    Edge,
+    Content,
+    Preview,
+    /// Its preset menu.
+    Menu,
+}
+
+impl Scope {
+    /// The settings window.
+    pub const SETTINGS: [Scope; 4] = [Scope::Tree, Scope::Edge, Scope::Content, Scope::Preview];
 }
 
 /// An adjustment from the arrow, Page and Home/End keys.
@@ -97,8 +122,30 @@ impl<M: Clone> Registry<M> {
         self.entries.borrow_mut().push(entry);
     }
 
+    pub fn len(&self) -> usize {
+        self.entries.borrow().len()
+    }
+
+    /// Put the entries from `start` on in another order: these ranges of them.
+    pub fn rearrange(&self, start: usize, order: impl IntoIterator<Item = Range<usize>>) {
+        let mut entries = self.entries.borrow_mut();
+        let mut rest: Vec<Option<Entry<M>>> = entries.drain(start..).map(Some).collect();
+        for range in order {
+            for i in range {
+                entries.extend(rest.get_mut(i - start).and_then(Option::take));
+            }
+        }
+        entries.extend(rest.into_iter().flatten());
+    }
+
     pub fn contains(&self, id: &FocusId) -> bool {
         self.entries.borrow().iter().any(|e| &e.id == id)
+    }
+
+    /// How many controls registered as `id` (one, or something's drawn twice).
+    #[cfg(test)]
+    pub fn count(&self, id: &FocusId) -> usize {
+        self.entries.borrow().iter().filter(|e| &e.id == id).count()
     }
 
     pub fn activate(&self, id: &FocusId) -> Option<M> {
@@ -130,17 +177,17 @@ impl<M: Clone> Registry<M> {
     }
 
     /// The next (or previous) focus stop, wrapping around. With `only`, Tab is
-    /// confined to that scope.
+    /// confined to those scopes.
     pub fn cycle(
         &self,
         current: Option<&FocusId>,
         back: bool,
-        only: Option<Scope>,
+        only: Option<&[Scope]>,
     ) -> Option<FocusId> {
         let entries = self.entries.borrow();
         let stops: Vec<&Entry<M>> = entries
             .iter()
-            .filter(|e| only.is_none_or(|s| e.scope == s))
+            .filter(|e| only.is_none_or(|s| s.contains(&e.scope)))
             .collect();
         if stops.is_empty() {
             return None;
@@ -191,10 +238,31 @@ mod tests {
         assert_eq!(r.cycle(Some(&c), false, None), Some(a.clone()));
         assert_eq!(r.cycle(Some(&a), true, None), Some(c.clone()));
         assert_eq!(
-            r.cycle(Some(&a), false, Some(Scope::Picker)),
+            r.cycle(Some(&a), false, Some(&[Scope::Picker])),
             Some(FocusId::Named("b"))
         );
         assert_eq!(r.position(&c), Some((1, 2, Scope::Main)));
+    }
+
+    #[test]
+    fn stops_can_be_put_in_another_order() {
+        let r = Registry::default();
+        for name in ["a", "b1", "b2", "c", "d"] {
+            r.push(entry(name, Scope::Main));
+        }
+        assert_eq!(r.len(), 5);
+        // "d" isn't in any range: it stays, at the end.
+        r.rearrange(1, [3..4, 1..3]);
+        let mut order = Vec::new();
+        let mut at = None;
+        for _ in 0..5 {
+            at = r.cycle(at.as_ref(), false, None);
+            order.push(at.clone().unwrap());
+        }
+        assert_eq!(
+            order,
+            ["a", "c", "b1", "b2", "d"].map(FocusId::Named).to_vec()
+        );
     }
 
     #[test]

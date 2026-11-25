@@ -113,6 +113,9 @@ pub(crate) struct Shared {
     target: MediaTarget,
     track: Option<Track>,
     pending: Pending,
+    /// Counts connections to the player: an older one may still be stuck in a call,
+    /// and has nothing more to say.
+    connection: u32,
 }
 
 impl Shared {
@@ -241,8 +244,24 @@ impl Media {
     /// Start following the active player (in the background; this returns at once).
     pub fn start() -> Self {
         let state = Arc::new(Mutex::new(Shared::default()));
-        let requests = backend::spawn(state.clone());
+        let requests = backend::spawn(state.clone(), MediaTarget::Any, 0);
         Self { state, requests }
+    }
+
+    /// Connect to the player again and read everything anew, in case the connection is
+    /// stuck (or never worked).
+    pub fn refresh(&mut self) {
+        let Ok(mut shared) = self.state.lock() else {
+            return;
+        };
+        shared.connection += 1;
+        // What's shown stays until there's something new, but nothing that was asked
+        // for hides it.
+        shared.pending = Pending::default();
+        let (target, connection) = (shared.target.clone(), shared.connection);
+        drop(shared);
+        // (The old thread ends with its requests.)
+        self.requests = backend::spawn(self.state.clone(), target, connection);
     }
 
     /// Sets the media target of the shared state.
@@ -294,7 +313,11 @@ mod backend {
 
     const POLL: Duration = Duration::from_millis(500);
 
-    pub fn spawn(state: Arc<Mutex<Shared>>) -> Option<Sender<Request>> {
+    pub fn spawn(
+        state: Arc<Mutex<Shared>>,
+        mut target: MediaTarget,
+        connection: u32,
+    ) -> Option<Sender<Request>> {
         let (tx, rx) = mpsc::channel::<Request>();
         std::thread::Builder::new()
             .name("undavi-mpris".into())
@@ -306,11 +329,13 @@ mod backend {
                         return;
                     }
                 };
-                let mut target = MediaTarget::Any;
                 loop {
                     let player = resolve_player(&finder, &target);
                     let snapshot = player.as_ref().and_then(read);
                     if let Ok(mut s) = state.lock() {
+                        if s.connection != connection {
+                            return;
+                        }
                         s.publish(snapshot, Instant::now());
                     }
                     match rx.recv_timeout(POLL) {
@@ -425,13 +450,17 @@ mod backend {
 
 #[cfg(not(target_os = "linux"))]
 mod backend {
-    use super::{Command, Request, Shared};
+    use super::{Command, MediaTarget, Request, Shared};
     use std::sync::mpsc::Sender;
     use std::sync::{Arc, Mutex};
 
     /// No media backend here yet (Windows would use System Media Transport
     /// Controls), so there's never a track; `Platform::media` hides the controls.
-    pub fn spawn(_state: Arc<Mutex<Shared>>) -> Option<Sender<Request>> {
+    pub fn spawn(
+        _state: Arc<Mutex<Shared>>,
+        _target: MediaTarget,
+        _connection: u32,
+    ) -> Option<Sender<Request>> {
         None
     }
 }
@@ -439,6 +468,17 @@ mod backend {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn refreshing_connects_again() {
+        let mut media = Media::start();
+        media.set_target(MediaTarget::App("spotify".into()));
+        media.refresh();
+        media.refresh();
+        let shared = media.state.lock().unwrap();
+        assert_eq!(shared.connection, 2);
+        assert_eq!(shared.target, MediaTarget::App("spotify".into()));
+    }
 
     fn track(playing: bool, pos_s: u64, at: Instant) -> Track {
         Track {

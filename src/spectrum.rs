@@ -217,10 +217,11 @@ impl Processor {
         let fall_s = tuning.fall_ms as f32 / 1000.0;
         let rise = 1.0 - (-dt / (tuning.rise_ms as f32 / 1000.0)).exp();
         let fall = 1.0 - (-dt / fall_s).exp();
-        // Gravity: constant acceleration that drops a full bar in GRAVITY_FALLS fall times.
-        let gravity = tuning
-            .gravity
-            .then(|| 2.0 / (GRAVITY_FALLS * fall_s).powi(2));
+        // Gravity: constant acceleration that drops a full bar in GRAVITY_FALLS fall
+        // times at 100% strength (stronger pulls harder, so it drops sooner).
+        let gravity = tuning.gravity.then(|| {
+            2.0 / (GRAVITY_FALLS * fall_s).powi(2) * tuning.gravity_strength as f32 / 100.0
+        });
         for i in 0..self.heights.len() {
             let (h, t) = (&mut self.heights[i], self.targets[i]);
             if t > *h {
@@ -255,7 +256,7 @@ impl Processor {
         for i in 0..self.heights.len() {
             let v = (self.heights[i] * agc).clamp(0.0, 1.0);
             self.visible[i] = v;
-            // Peak caps: hold, then fall at the Tuning fall rate (or with gravity).
+            // Peak caps: hold, then fall at the Fall time's rate (or with gravity).
             if v >= self.peaks[i] {
                 self.peaks[i] = v;
                 self.peak_hold[i] = hold;
@@ -453,7 +454,7 @@ pub struct Gate {
 
 impl Gate {
     /// Feed this frame's input level (`None` when no audio arrives) and the gate
-    /// threshold from Tuning; returns whether there's sound to show.
+    /// threshold from the settings; returns whether there's sound to show.
     pub fn update(&mut self, level_db: Option<f32>, threshold_db: i8, dt: f32) -> bool {
         let threshold = if threshold_db <= GATE_OFF {
             SILENCE_DB
@@ -565,7 +566,7 @@ impl BeatGlow {
         self.pulse = pulse;
     }
 
-    /// Run one frame (`None` is silence). `sensitivity` is the Tuning beat
+    /// Run one frame (`None` is silence). `sensitivity` is the beat
     /// sensitivity, 0..=100.
     pub fn update(
         &mut self,

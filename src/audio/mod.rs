@@ -39,7 +39,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 #[cfg(target_os = "linux")]
-mod apps;
+mod linux;
 
 /// The default FFT size (samples per analysis window).
 pub const FFT_SIZE: usize = 4096;
@@ -173,7 +173,7 @@ fn app_sources(host: &cpal::Host) -> Vec<Source> {
             label: "Music player".into(),
             kind: SourceKind::Player,
         }];
-        out.extend(apps::playing_apps().into_iter().map(|a| Source {
+        out.extend(linux::playing_apps().into_iter().map(|a| Source {
             id: a.key,
             label: a.label,
             kind: SourceKind::App,
@@ -296,7 +296,7 @@ enum Backend {
     Device(#[allow(dead_code)] cpal::Stream),
     /// One app, or the player's app, through PipeWire.
     #[cfg(target_os = "linux")]
-    App(apps::AppCapture),
+    App(linux::AppCapture),
 }
 
 /// A running capture stream. Dropping it stops capture.
@@ -402,14 +402,14 @@ impl Capture {
     /// [`Capture::follow_player`] says which app the player is.
     #[cfg(target_os = "linux")]
     fn start_app(source: &Source) -> Result<Self, String> {
-        let rb = HeapRb::<f32>::new(2 * (apps::RATE as usize).next_power_of_two());
+        let rb = HeapRb::<f32>::new(2 * (linux::RATE as usize).next_power_of_two());
         let (mut producer, consumer) = rb.split();
         let dead = Arc::new(AtomicBool::new(false));
         let target = match source.kind {
-            SourceKind::App => apps::Target::App(source.id.clone()),
-            _ => apps::Target::None,
+            SourceKind::App => linux::Target::App(source.id.clone()),
+            _ => linux::Target::None,
         };
-        let capture = apps::AppCapture::start(
+        let capture = linux::AppCapture::start(
             target,
             move |pairs: &[f32]| {
                 let room = producer.vacant_len() & !1;
@@ -420,7 +420,7 @@ impl Capture {
         Ok(Self {
             backend: Backend::App(capture),
             consumer,
-            sample_rate: apps::RATE,
+            sample_rate: linux::RATE,
             dead,
         })
     }
@@ -438,11 +438,11 @@ impl Capture {
         #[cfg(target_os = "linux")]
         if let Backend::App(capture) = &mut self.backend {
             capture.set_target(match player {
-                Some((bus, identity)) => apps::Target::Player {
+                Some((bus, identity)) => linux::Target::Player {
                     bus: bus.to_string(),
                     identity: identity.to_string(),
                 },
-                None => apps::Target::None,
+                None => linux::Target::None,
             });
         }
         let _ = player;

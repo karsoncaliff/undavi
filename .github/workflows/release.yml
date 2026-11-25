@@ -46,13 +46,13 @@ jobs:
 
       - name: Package
         # The tarball keeps the repository's layout, so its install script works
-        # as is: tar xf …; cd …; sudo packaging/install.sh
+        # as is: tar xf …; cd …; sudo ./install.sh
         run: |
           name="undavi-${GITHUB_REF_NAME#v}-x86_64-linux"
           mkdir -p "dist/$name"
-          cp --parents -r target/release/undavi packaging/install.sh packaging/linux \
+          cp --parents -r target/release/undavi install.sh packaging/linux \
             packaging/THIRD-PARTY-LICENSES.txt assets/icons/linux assets/fonts/OFL-Inter.txt \
-            LICENSE NOTICE README.md CHANGELOG.md "dist/$name/"
+            assets/icons/ui/LICENSE LICENSE NOTICE README.md CHANGELOG.md "dist/$name/"
           tar -C dist -czf "dist/$name.tar.gz" "$name"
           (cd dist && sha256sum "$name.tar.gz" > "$name.tar.gz.sha256")
 

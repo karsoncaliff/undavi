@@ -1,41 +1,60 @@
 //! Everything the user can set, the presets, and the settings file.
 //!
-//! Settings come in three groups, one per panel:
+//! Settings come in seven groups, one per section of the settings window
+//! ([`SectionId`]):
 //!
 //! - [`TuningSettings`]: how the bars react to sound.
-//! - [`VisualSettings`]: how the bars look.
-//! - [`AppearanceSettings`]: background, track info, lyrics and the window.
+//! - [`VisualSettings`]: the visualizer shader and its settings.
+//! - [`ColorSettings`]: the palette and the accent.
+//! - [`BackgroundSettings`]: the background shader, its settings and the effects.
+//! - [`NowPlayingSettings`]: how the current track is shown.
+//! - [`LyricsSettings`]: the lyrics.
+//! - [`GeneralSettings`]: the controls and the window.
 //!
-//! Each panel also keeps its own list of named presets ([`Preset`],
-//! [`TuningPreset`], [`AppearancePreset`]). All of it is saved as one JSON file,
-//! [`Stored`], at [`config_path`]; [`load`] and [`save`] read and write it.
+//! Each section also keeps its own presets ([`Section`]). All of it is saved as
+//! one JSON file, [`Stored`], at [`config_path`]; [`load`] and [`save`] read and
+//! write it.
 //!
 //! # Compatibility
 //!
 //! Every struct uses `#[serde(default)]`, so a field missing from an older file
 //! gets its default. Renamed fields and values keep their old names as serde
 //! aliases. Changes that need more than that bump [`CONFIG_VERSION`] and add a
-//! step to [`migrate`]. Values read from a file are always brought back into
+//! step to [`upgrade`]. Values read from a file are always brought back into
 //! range (the `clamped` methods), so a hand-edited file can't break the app.
 //!
 //! # Examples
 //!
 //! ```
-//! use undavi::settings::{Stored, migrate};
+//! use undavi::settings::{Stored, migrate, upgrade};
 //!
 //! // A file from an older version: "smoothing" is now called "spread", and
 //! // out-of-range values are fixed on load.
-//! let old: Stored = serde_json::from_str(r#"{"tuning": {"smoothing": 30, "sensitivity": 250}}"#)?;
-//! let settings = migrate(old);
-//! assert_eq!(settings.tuning.spread, 30);
-//! assert_eq!(settings.tuning.sensitivity, 100);
+//! let mut old = serde_json::json!({"tuning": {"smoothing": 30, "sensitivity": 250}});
+//! upgrade(&mut old);
+//! let settings: Stored = migrate(serde_json::from_value(old)?);
+//! assert_eq!(settings.sections.sound.spread, 30);
+//! assert_eq!(settings.sections.sound.sensitivity, 100);
 //! # Ok::<(), serde_json::Error>(())
 //! ```
 
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-/// How the bars react to sound (the Tuning panel).
+mod controls;
+mod presets;
+mod versions;
+
+pub use controls::{
+    Action, ActionGroup, BarsScroll, Combo, ControlSettings, DoubleClick, MAX_KEYS, Shortcuts,
+};
+pub use presets::{
+    BuiltIn, Fill, Preset, PresetGroup, PresetId, Section, SectionId, SectionPresets,
+    SectionSettings, Sections,
+};
+pub use versions::{upgrade, upgrade_to_v1, upgrade_to_v2, upgrade_to_v3, upgrade_to_v4};
+
+/// How the bars react to sound (the Sound section).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct TuningSettings {
@@ -81,6 +100,8 @@ pub struct TuningSettings {
     pub freq_scale: FreqScale,
     /// Bars and peak caps fall with acceleration instead of easing down.
     pub gravity: bool,
+    /// How hard gravity pulls, 25..=250 % (100 = a full bar drops in three fall times).
+    pub gravity_strength: u8,
     /// Input below this level counts as silence, -100..=-30 dBFS (-100 = gate off).
     pub gate_db: i8,
     /// What the bars do while it's silent.
@@ -233,6 +254,7 @@ impl Default for TuningSettings {
             agc_speed: AdaptSpeed::Medium,
             freq_scale: FreqScale::Log,
             gravity: false,
+            gravity_strength: 100,
             gate_db: -70,
             when_silent: SilenceMode::Fade,
             beat_sensitivity: 50,
@@ -243,18 +265,6 @@ impl Default for TuningSettings {
 
 /// Minimum distance between the two frequency-range handles, in steps.
 pub const FREQ_MIN_GAP: u8 = 10;
-
-/// Bar corner shape.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Corners {
-    /// Sharp corners.
-    Square,
-    /// Slightly rounded.
-    Rounded,
-    /// Fully round ends.
-    Pill,
-}
 
 /// How the bars are mirrored.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -271,6 +281,17 @@ pub enum Mirror {
 }
 
 impl Mirror {
+    /// From a visualizer's `mirror` setting ("Off", "Up/down", "Left/right", "Both").
+    pub fn from_label(label: &str) -> Option<Self> {
+        Some(match label {
+            "Off" => Mirror::Off,
+            "Up/down" => Mirror::UpDown,
+            "Left/right" => Mirror::LeftRight,
+            "Both" => Mirror::Both,
+            _ => return None,
+        })
+    }
+
     /// Bars grow both up and down.
     pub fn up_down(self) -> bool {
         matches!(self, Mirror::UpDown | Mirror::Both)
@@ -311,7 +332,7 @@ pub enum Palette {
 }
 
 impl Palette {
-    /// The name shown in the Visuals panel.
+    /// The name shown in the Colors section.
     pub fn name(&self) -> &'static str {
         match self {
             Palette::Silver => "Silver",
@@ -340,37 +361,27 @@ impl Palette {
 /// Starting stops when the user first picks the custom swatch.
 pub const DEFAULT_CUSTOM: [[u8; 3]; 2] = [[0xFF, 0x7A, 0xC6], [0x7A, 0x9D, 0xF8]];
 
-/// How the bars look (the Visuals panel).
+/// A shader's saved setting values by id (the ids its `// @setting` lines
+/// declare), as JSON: numbers, `true`/`false`, a choice's label, or a color as
+/// `"#rrggbb"`. Anything missing or out of range takes the declared default.
+pub type ShaderValues = std::collections::BTreeMap<String, serde_json::Value>;
+
+/// The visualizer (the Visualizer section): which shader draws it, and each
+/// visualizer's own settings.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct VisualSettings {
-    /// Number of bars (or wave points), 16..=96.
-    pub bar_count: u8,
-    /// Bar (or line) width, 2..=16 px.
-    pub bar_width: u8,
-    /// Space between bars, 0..=20 px.
-    pub spacing: u8,
-    /// Length of a full bar, 100..=1200 px in steps of 10 (both halves together when
-    /// mirrored up/down). Never more than the window has room for.
-    pub max_length: u16,
-    /// Bar corner shape.
-    pub corners: Corners,
-    /// Mirroring.
-    pub mirror: Mirror,
-    /// Which channel the bars show when both halves show the same spectrum.
-    pub channel: Channel,
-    /// With Left/right mirroring, give each half its own signal instead of the
-    /// same spectrum twice. Older versions saved this as `"stereo": true/false`.
-    #[serde(alias = "stereo", deserialize_with = "split_or_bool")]
-    pub split: Split,
-    /// Draw bars as stacks of segments, like an LED meter.
-    pub segments: bool,
-    /// Segment height, 2..=16 px.
-    pub segment_size: u8,
-    /// Gap between segments, 1..=8 px.
-    pub segment_gap: u8,
-    /// Small caps that mark each bar's recent peak.
-    pub peak_caps: bool,
+    /// The visualizer: `"bars"`, `"radial"` or `"wave"` (built in), or the name
+    /// of a file in the `shaders` folder next to the settings file, without `.wgsl`.
+    pub shader: String,
+    /// Each visualizer's settings, by shader name.
+    pub values: std::collections::BTreeMap<String, ShaderValues>,
+}
+
+/// The Colors section: the bar colors every visualizer shares, and the accent.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ColorSettings {
     /// Bar colors.
     pub palette: Palette,
     /// Album palette: a gradient of the cover's colors (or one solid color).
@@ -380,14 +391,20 @@ pub struct VisualSettings {
     pub album_match_accent: bool,
     /// Which way a multi-color palette runs.
     pub gradient: GradientDir,
-    /// Bars, radial or wave.
-    pub style: VisualStyle,
-    /// Bars brighten and get a soft halo in time with the music.
-    pub glow: bool,
-    /// What the glow follows.
-    pub glow_source: GlowSource,
-    /// 0..=100.
-    pub glow_amount: u8,
+    /// The UI accent color.
+    pub accent: Accent,
+}
+
+impl Default for ColorSettings {
+    fn default() -> Self {
+        Self {
+            palette: Palette::Undavi,
+            album_gradient: true,
+            album_match_accent: false,
+            gradient: GradientDir::Across,
+            accent: Accent::Sky,
+        }
+    }
 }
 
 /// The signal behind a single (unsplit) spectrum.
@@ -414,31 +431,28 @@ pub enum Split {
     MidSide,
 }
 
-/// Reads `split`, or the `stereo` switch older versions saved in its place.
-fn split_or_bool<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Split, D::Error> {
-    #[derive(Deserialize)]
-    #[serde(untagged)]
-    enum Repr {
-        Old(bool),
-        New(Split),
+impl Channel {
+    /// From a visualizer's `channel` setting ("Mono", "Left", "Right").
+    pub fn from_label(label: &str) -> Option<Self> {
+        Some(match label {
+            "Mono" => Channel::Mono,
+            "Left" => Channel::Left,
+            "Right" => Channel::Right,
+            _ => return None,
+        })
     }
-    Ok(match Repr::deserialize(d)? {
-        Repr::Old(true) => Split::Stereo,
-        Repr::Old(false) => Split::Off,
-        Repr::New(s) => s,
-    })
 }
 
-/// How the spectrum is drawn.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum VisualStyle {
-    /// Vertical bars in a row (the original look).
-    Bars,
-    /// Bars in a ring around the album cover.
-    Radial,
-    /// A smooth curve through the spectrum.
-    Wave,
+impl Split {
+    /// From a visualizer's `split` setting ("Off", "Stereo", "Mid/Side").
+    pub fn from_label(label: &str) -> Option<Self> {
+        Some(match label {
+            "Off" => Split::Off,
+            "Stereo" => Split::Stereo,
+            "Mid/Side" => Split::MidSide,
+            _ => return None,
+        })
+    }
 }
 
 /// What a glow effect (bar glow, background pulse) follows.
@@ -451,44 +465,23 @@ pub enum GlowSource {
     Drums,
 }
 
-impl Default for VisualSettings {
-    fn default() -> Self {
-        Self {
-            bar_count: 43,
-            bar_width: 8,
-            spacing: 12,
-            max_length: 400,
-            corners: Corners::Square,
-            mirror: Mirror::UpDown,
-            channel: Channel::Mono,
-            split: Split::Stereo,
-            segments: false,
-            segment_size: 6,
-            segment_gap: 3,
-            peak_caps: false,
-            palette: Palette::Undavi,
-            album_gradient: true,
-            album_match_accent: false,
-            gradient: GradientDir::Across,
-            style: VisualStyle::Bars,
-            glow: false,
-            glow_source: GlowSource::Bass,
-            glow_amount: 50,
-        }
+impl GlowSource {
+    /// From a shader's `glow_source` or `pulse_source` setting ("Bass", "Drums").
+    pub fn from_label(label: &str) -> Option<Self> {
+        Some(match label {
+            "Bass" => GlowSource::Bass,
+            "Drums" => GlowSource::Drums,
+            _ => return None,
+        })
     }
 }
 
-impl VisualSettings {
-    /// Bring every field back into its documented range (used after loading from disk).
-    pub fn clamped(mut self) -> Self {
-        self.bar_count = self.bar_count.clamp(16, 96);
-        self.bar_width = self.bar_width.clamp(2, 16);
-        self.spacing = self.spacing.min(20);
-        self.max_length = (self.max_length.clamp(100, 1200) / 10) * 10;
-        self.segment_size = self.segment_size.clamp(2, 16);
-        self.segment_gap = self.segment_gap.clamp(1, 8);
-        self.glow_amount = self.glow_amount.min(100);
-        self
+impl Default for VisualSettings {
+    fn default() -> Self {
+        Self {
+            shader: "bars".into(),
+            values: Default::default(),
+        }
     }
 }
 
@@ -512,87 +505,13 @@ impl TuningSettings {
         self.gate_db = self.gate_db.clamp(GATE_OFF, -30);
         self.beat_sensitivity = self.beat_sensitivity.min(100);
         self.delay_ms = (self.delay_ms.min(MAX_DELAY_MS) / 10) * 10;
+        self.gravity_strength = (self.gravity_strength.clamp(25, 250) / 5) * 5;
         self
     }
 }
 
 // ---------------------------------------------------------------------------
-// Appearance
-
-/// What fills the window behind the bars.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum BackgroundMode {
-    /// One flat color ([`SolidColor`]).
-    Solid,
-    /// The album cover, blurred and dimmed.
-    AlbumArt,
-    /// Soft color blobs (from the cover when there is one).
-    Ambient,
-}
-
-impl BackgroundMode {
-    /// Whether the background is an image that moves and changes with the track.
-    pub fn is_dynamic(self) -> bool {
-        self != BackgroundMode::Solid
-    }
-}
-
-/// The solid background colors.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum SolidColor {
-    /// Near-black gray, #141416.
-    Charcoal,
-    /// Pure black.
-    Black,
-    /// Very dark blue, #0F1424.
-    Midnight,
-    /// Very dark purple, #1C1322.
-    Plum,
-}
-
-impl SolidColor {
-    /// Every color, in swatch order.
-    pub const ALL: [SolidColor; 4] = [
-        SolidColor::Charcoal,
-        SolidColor::Black,
-        SolidColor::Midnight,
-        SolidColor::Plum,
-    ];
-
-    /// The color as RGB.
-    pub fn rgb(self) -> [u8; 3] {
-        match self {
-            SolidColor::Charcoal => [0x14, 0x14, 0x16],
-            SolidColor::Black => [0x00, 0x00, 0x00],
-            SolidColor::Midnight => [0x0F, 0x14, 0x24],
-            SolidColor::Plum => [0x1C, 0x13, 0x22],
-        }
-    }
-
-    /// The name shown in the Appearance panel.
-    pub fn name(self) -> &'static str {
-        match self {
-            SolidColor::Charcoal => "Charcoal",
-            SolidColor::Black => "Black",
-            SolidColor::Midnight => "Midnight",
-            SolidColor::Plum => "Plum",
-        }
-    }
-}
-
-/// How a dynamic background moves while music plays.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Motion {
-    /// It doesn't.
-    Still,
-    /// A slow sideways drift.
-    Drift,
-    /// A slow turn.
-    Spiral,
-}
+// Now playing, lyrics, colors, background and window
 
 /// How the current track is shown.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -640,7 +559,7 @@ impl Accent {
         Accent::White,
     ];
 
-    /// The name shown in the Appearance panel.
+    /// The name shown in the Colors section.
     pub fn name(self) -> &'static str {
         match self {
             Accent::Album => "From album art",
@@ -677,48 +596,301 @@ pub fn wants_dark_icon(c: [u8; 3]) -> bool {
     (0.299 * c[0] as f32 + 0.587 * c[1] as f32 + 0.114 * c[2] as f32) / 255.0 > 0.6
 }
 
-/// Background, track info, lyrics and window behavior (the Appearance panel).
+/// The background (the Background section): which shader draws it, each
+/// background's own settings, and the effects over every background.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
-pub struct AppearanceSettings {
-    /// What fills the background.
-    pub bg_mode: BackgroundMode,
-    /// The color for [`BackgroundMode::Solid`].
-    pub solid_color: SolidColor,
-    /// How a dynamic background moves.
-    pub motion: Motion,
-    /// Background blur, 0..=120 px.
-    pub blur_px: u8,
-    /// Background darkening, 0..=90 %.
+pub struct BackgroundSettings {
+    /// `"solid"`, `"album-art"` or `"ambient"` (built in), or the name of a file
+    /// in the `shaders` folder, without `.wgsl`.
+    pub shader: String,
+    /// Each background's settings, by shader name.
+    pub values: std::collections::BTreeMap<String, ShaderValues>,
+    /// Darkening, 0..=90 % (every background but Solid).
     pub dim_pct: u8,
+    /// Color saturation, 0..=200 % (100 = unchanged, 0 = gray).
+    pub saturation: u8,
+    /// Brightness, 50..=150 %.
+    pub brightness: u8,
+    /// Contrast, 50..=150 %.
+    pub contrast: u8,
+    /// How far the colors lean toward the accent, 0..=100 %.
+    pub tint_pct: u8,
+    /// Darker edges, 0..=100 %.
+    pub vignette_pct: u8,
+    /// Film grain, 0..=100 %.
+    pub grain_pct: u8,
+}
+
+impl Default for BackgroundSettings {
+    fn default() -> Self {
+        Self {
+            shader: "album-art".into(),
+            values: Default::default(),
+            dim_pct: 55,
+            saturation: 100,
+            brightness: 100,
+            contrast: 100,
+            tint_pct: 0,
+            vignette_pct: 0,
+            grain_pct: 0,
+        }
+    }
+}
+
+impl BackgroundSettings {
+    /// Whether the background is a picture (anything but Solid), which the
+    /// header's text and buttons adapt to.
+    pub fn is_dynamic(&self) -> bool {
+        self.shader != "solid"
+    }
+
+    /// Bring every field back into its documented range. Shader values are
+    /// checked against their declarations when used.
+    pub fn clamped(mut self) -> Self {
+        self.dim_pct = self.dim_pct.min(90);
+        self.saturation = self.saturation.min(200);
+        self.brightness = self.brightness.clamp(50, 150);
+        self.contrast = self.contrast.clamp(50, 150);
+        self.tint_pct = self.tint_pct.min(100);
+        self.vignette_pct = self.vignette_pct.min(100);
+        self.grain_pct = self.grain_pct.min(100);
+        self
+    }
+}
+
+/// The Now playing section.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct NowPlayingSettings {
     /// How the current track is shown.
-    pub now_playing: NowPlayingMode,
+    pub mode: NowPlayingMode,
     /// Show the cover next to the track info.
     pub show_album_art: bool,
+}
+
+impl Default for NowPlayingSettings {
+    fn default() -> Self {
+        Self {
+            mode: NowPlayingMode::Header,
+            show_album_art: true,
+        }
+    }
+}
+
+/// How the playback bar is drawn.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PlaybackStyle {
+    /// On the background, without a fill.
+    #[default]
+    Open,
+    /// A rounded card below the bars.
+    Card,
+    /// A strip along the bottom of the window.
+    Dock,
+}
+
+/// What marks the position on the seek bar.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SeekHandle {
+    /// An upright bar.
+    #[default]
+    Bar,
+    /// A round dot.
+    Dot,
+    /// Nothing.
+    None,
+}
+
+/// The Playback bar section. What's `None` is up to the style (see
+/// [`PlaybackSettings::look`]).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PlaybackSettings {
+    /// How the bar is drawn.
+    pub style: PlaybackStyle,
+    /// Everything in one row.
+    pub compact: bool,
+    /// How wide it gets, 500..=1600 px (a Dock is always as wide as the window).
+    pub width: u16,
+    /// How solid a Card or Dock is, 0..=100 %.
+    pub opacity: u8,
+    /// The cover and title in a Card or Dock.
+    pub track_info: bool,
+    /// The repeat button.
+    pub repeat: bool,
+    /// The volume button (or slider).
+    pub volume: bool,
+    /// The full-screen button.
+    pub fullscreen: bool,
+    /// A filled circle for the play button.
+    pub filled_play: Option<bool>,
+    /// Height of the curve over the part that's played, from its middle, 0..=14 px
+    /// (0 = a straight line).
+    pub curve_height: Option<u8>,
+    /// Length of one wave of it, 30..=240 px.
+    pub curve_length: Option<u16>,
+    /// How fast it moves while music plays, 0..=300 % (0 = still).
+    pub curve_speed: u16,
+    /// How thick the lines are, 2..=10 px.
+    pub thickness: Option<u8>,
+    /// What marks the position.
+    pub handle: SeekHandle,
+    /// How bright the part still to play is, 10..=100 %.
+    pub remaining: Option<u8>,
+    /// The elapsed and remaining time.
+    pub times: bool,
+}
+
+impl Default for PlaybackSettings {
+    fn default() -> Self {
+        Self {
+            style: PlaybackStyle::Open,
+            compact: false,
+            width: 1000,
+            opacity: 85,
+            track_info: true,
+            repeat: true,
+            volume: true,
+            fullscreen: true,
+            filled_play: None,
+            curve_height: None,
+            curve_length: None,
+            curve_speed: 100,
+            thickness: None,
+            handle: SeekHandle::Bar,
+            remaining: None,
+            times: true,
+        }
+    }
+}
+
+/// [`PlaybackSettings`] with what's up to the style filled in.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PlaybackLook {
+    /// A filled circle for the play button.
+    pub filled_play: bool,
+    /// Height of the curve from its middle, px.
+    pub curve_height: u8,
+    /// Length of one wave, px.
+    pub curve_length: u16,
+    /// Thickness of the lines, px.
+    pub thickness: u8,
+    /// Brightness of the part still to play, %.
+    pub remaining: u8,
+    /// Width and height of a [`SeekHandle::Bar`], px.
+    pub handle: (f32, f32),
+}
+
+impl PlaybackSettings {
+    /// What the style (and compact mode) makes of the settings left to it.
+    pub fn look(&self) -> PlaybackLook {
+        let (filled_play, curve_height, curve_length, thickness, remaining, handle) =
+            match (self.style, self.compact) {
+                (PlaybackStyle::Open, false) => (false, 6, 100, 7, 100, (8.0, 36.0)),
+                (PlaybackStyle::Open, true) => (false, 4, 70, 5, 100, (6.0, 24.0)),
+                (PlaybackStyle::Card, _) => (true, 4, 52, 4, 35, (5.0, 20.0)),
+                (PlaybackStyle::Dock, _) => (true, 3, 44, 4, 25, (5.0, 18.0)),
+            };
+        PlaybackLook {
+            filled_play: self.filled_play.unwrap_or(filled_play),
+            curve_height: self.curve_height.unwrap_or(curve_height),
+            curve_length: self.curve_length.unwrap_or(curve_length),
+            thickness: self.thickness.unwrap_or(thickness),
+            remaining: self.remaining.unwrap_or(remaining),
+            handle,
+        }
+    }
+
+    /// Bring every field back into its documented range.
+    pub fn clamped(mut self) -> Self {
+        self.width = (self.width.clamp(500, 1600) / 50) * 50;
+        self.opacity = self.opacity.min(100);
+        self.curve_height = self.curve_height.map(|v| v.min(14));
+        self.curve_length = self.curve_length.map(|v| v.clamp(30, 240));
+        self.curve_speed = self.curve_speed.min(300);
+        self.thickness = self.thickness.map(|v| v.clamp(2, 10));
+        self.remaining = self.remaining.map(|v| v.clamp(10, 100));
+        self
+    }
+}
+
+/// The Lyrics section.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct LyricsSettings {
+    /// Synced lyrics above (Header, Minimal, Off) or beside (Spotlight) the bars.
+    pub show: bool,
+    /// Text size, 70..=150 %.
+    pub size: u8,
+    /// Shifts the timing, -2000..=2000 ms (positive shows lines earlier).
+    pub offset_ms: i16,
+    /// Glow on lit characters, 0..=100 (0 = off).
+    pub glow: u8,
+    /// Fill each word as it's sung when the lyrics have word timing. Off lights
+    /// whole lines at once, even for word-synced lyrics.
+    pub word_sync: bool,
+}
+
+impl Default for LyricsSettings {
+    fn default() -> Self {
+        Self {
+            show: true,
+            size: 100,
+            offset_ms: 0,
+            glow: 60,
+            word_sync: true,
+        }
+    }
+}
+
+impl LyricsSettings {
+    /// Bring every field back into its documented range.
+    pub fn clamped(mut self) -> Self {
+        self.size = self.size.clamp(70, 150);
+        self.offset_ms = (self.offset_ms.clamp(-2000, 2000) / 50) * 50;
+        self.glow = self.glow.min(100);
+        self
+    }
+}
+
+/// The General section: the controls and the window.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct GeneralSettings {
     /// Hide the controls when the mouse is still.
     pub auto_hide: bool,
     /// Seconds of stillness before auto-hide, 1..=10.
     pub hide_after_s: u8,
+    /// With auto-hide, only moving the mouse brings the controls back (not keys,
+    /// clicks or scrolling).
+    pub show_on_move_only: bool,
     /// Keep the window above others (not available on Wayland).
     pub always_on_top: bool,
-    /// The UI accent color.
-    pub accent: Accent,
-    /// Synced lyrics above (Header, Minimal, Off) or beside (Spotlight) the bars.
-    pub lyrics: bool,
-    /// Lyrics text size, 70..=150 %.
-    pub lyrics_size: u8,
-    /// Shifts lyrics timing, -2000..=2000 ms (positive shows lines earlier).
-    pub lyrics_offset_ms: i16,
-    /// Glow on lit lyric characters, 0..=100 (0 = off).
-    pub lyrics_glow: u8,
-    /// Album art / ambient background swells with the beat.
-    pub bg_pulse: bool,
-    /// What the background pulse follows.
-    pub bg_pulse_source: GlowSource,
-    /// Background pulse strength, 0..=100.
-    pub bg_pulse_amount: u8,
     /// Redraw limit; lower rates save battery.
     pub frame_rate: FrameRate,
+}
+
+impl Default for GeneralSettings {
+    fn default() -> Self {
+        Self {
+            auto_hide: true,
+            hide_after_s: 3,
+            show_on_move_only: false,
+            always_on_top: false,
+            frame_rate: FrameRate::Display,
+        }
+    }
+}
+
+impl GeneralSettings {
+    /// Bring every field back into its documented range.
+    pub fn clamped(mut self) -> Self {
+        self.hide_after_s = self.hide_after_s.clamp(1, 10);
+        self
+    }
 }
 
 /// The most frames per second the app draws.
@@ -743,46 +915,6 @@ impl FrameRate {
             FrameRate::Fps60 => Some(std::time::Duration::from_micros(16_667)),
             FrameRate::Display => None,
         }
-    }
-}
-
-impl Default for AppearanceSettings {
-    fn default() -> Self {
-        Self {
-            bg_mode: BackgroundMode::AlbumArt,
-            solid_color: SolidColor::Charcoal,
-            motion: Motion::Spiral,
-            blur_px: 80,
-            dim_pct: 55,
-            now_playing: NowPlayingMode::Header,
-            show_album_art: true,
-            auto_hide: true,
-            hide_after_s: 3,
-            always_on_top: false,
-            accent: Accent::Sky,
-            lyrics: true,
-            lyrics_size: 100,
-            lyrics_offset_ms: 0,
-            lyrics_glow: 60,
-            bg_pulse: false,
-            bg_pulse_source: GlowSource::Bass,
-            bg_pulse_amount: 50,
-            frame_rate: FrameRate::Display,
-        }
-    }
-}
-
-impl AppearanceSettings {
-    /// Bring every field back into its documented range.
-    pub fn clamped(mut self) -> Self {
-        self.blur_px = self.blur_px.min(120);
-        self.dim_pct = self.dim_pct.min(90);
-        self.hide_after_s = self.hide_after_s.clamp(1, 10);
-        self.lyrics_size = self.lyrics_size.clamp(70, 150);
-        self.lyrics_offset_ms = (self.lyrics_offset_ms.clamp(-2000, 2000) / 50) * 50;
-        self.lyrics_glow = self.lyrics_glow.min(100);
-        self.bg_pulse_amount = self.bg_pulse_amount.min(100);
-        self
     }
 }
 
@@ -828,11 +960,18 @@ pub fn format_db(db: i8) -> String {
 // Persistence
 
 /// The settings file format. Bump it when a change needs more than serde defaults
-/// and aliases to read older files, and add the step to [`migrate`].
+/// and aliases to read older files, and add the step to [`upgrade`].
 ///
 /// - 0: files from before the version number existed.
-/// - 1: Undavi 0.9, the first release (adds `version`).
-pub const CONFIG_VERSION: u32 = 1;
+/// - 1: Undavi 0.9, the first release (adds `version`); see [`upgrade_to_v1`].
+/// - 2: visualizers and backgrounds are shaders with their own settings
+///   (`visuals.shader` and `values`, `appearance.background` and
+///   `background_values`); see [`upgrade_to_v2`].
+/// - 3: the Appearance panel split into Background and Interface, each with its
+///   own settings (`background`, `interface`) and presets; see [`upgrade_to_v3`].
+/// - 4: one `sections` object, with each section's settings, presets and the
+///   preset in use together; see [`upgrade_to_v4`].
+pub const CONFIG_VERSION: u32 = 4;
 
 /// Everything in the settings file: the current settings and every preset.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -842,115 +981,73 @@ pub struct Stored {
     /// without one are version 0.
     #[serde(default)]
     pub version: u32,
-    /// Current Tuning settings.
-    pub tuning: TuningSettings,
-    /// Current Visuals settings.
-    pub visuals: VisualSettings,
-    /// Current Appearance settings.
-    pub appearance: AppearanceSettings,
-    /// Visuals presets (kept under this name for older settings files).
-    pub presets: Vec<Preset>,
-    /// Tuning presets.
-    pub tuning_presets: Vec<TuningPreset>,
-    /// Appearance presets.
-    pub appearance_presets: Vec<AppearancePreset>,
+    /// Every section's settings and presets.
+    pub sections: Sections,
     /// The audio source picked last (`None`: System Audio).
     pub source: Option<crate::audio::Source>,
+    /// Update checks.
+    pub updates: UpdateSettings,
+    /// Which parts the signal monitor shows.
+    pub monitor: MonitorSettings,
+    /// The starred settings, in the order they were starred (see the app's
+    /// `SettingKey`). Shown in the quick settings.
+    pub favorites: Vec<String>,
+}
+
+/// The signal monitor's parts (in the Sound section), each shown or hidden.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MonitorSettings {
+    /// Input level, the loudest bar and bar heights over time.
+    pub signal: bool,
+    /// The spectrum with the bars' frequency and level range.
+    pub spectrum: bool,
+    /// Beat pulses, hits and tempo.
+    pub beats: bool,
+    /// Frame rate, the audio source and what the player, lyrics and art are doing.
+    pub performance: bool,
+}
+
+impl Default for MonitorSettings {
+    fn default() -> Self {
+        Self {
+            signal: true,
+            spectrum: true,
+            beats: true,
+            performance: true,
+        }
+    }
+}
+
+/// Whether Undavi looks for new releases, and installs them without asking.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UpdateSettings {
+    /// Ask GitHub for the latest release when Undavi starts.
+    pub check: bool,
+    /// Install a new release without asking first (only for copies installed
+    /// from a release tarball or `install.sh`; package managers handle their own).
+    pub auto_install: bool,
+}
+
+impl Default for UpdateSettings {
+    fn default() -> Self {
+        Self {
+            check: true,
+            auto_install: false,
+        }
+    }
 }
 
 impl Default for Stored {
     fn default() -> Self {
         Self {
             version: CONFIG_VERSION,
-            tuning: TuningSettings::default(),
-            visuals: VisualSettings::default(),
-            appearance: AppearanceSettings::default(),
-            presets: Vec::new(),
-            tuning_presets: Vec::new(),
-            appearance_presets: Vec::new(),
+            sections: Sections::default(),
             source: None,
-        }
-    }
-}
-
-/// Which panel a preset belongs to; each panel keeps its own list.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PresetKind {
-    /// [`Preset`]s.
-    Visuals,
-    /// [`TuningPreset`]s.
-    Tuning,
-    /// [`AppearancePreset`]s.
-    Appearance,
-}
-
-/// A saved set of Visuals settings.
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Preset {
-    /// The name the user gave it (at most 40 characters).
-    pub name: String,
-    /// The settings it restores.
-    pub visuals: VisualSettings,
-    /// Older Visuals presets also stored the tuning. It moves to a Tuning preset
-    /// when settings load (see [`migrate_presets`]).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub tuning: Option<TuningSettings>,
-}
-
-/// A saved set of Tuning settings.
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct TuningPreset {
-    /// The name the user gave it (at most 40 characters).
-    pub name: String,
-    /// The settings it restores.
-    pub tuning: TuningSettings,
-}
-
-/// Everything in Appearance. Loading one keeps the current "Always on top",
-/// since that's about the window rather than the look.
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct AppearancePreset {
-    /// The name the user gave it (at most 40 characters).
-    pub name: String,
-    /// The settings it restores.
-    pub appearance: AppearanceSettings,
-}
-
-/// A saved preset of any kind: just enough for renaming and the shared list UI.
-pub trait Named {
-    /// The preset's name.
-    fn name(&self) -> &str;
-    /// The preset's name, for renaming.
-    fn name_mut(&mut self) -> &mut String;
-}
-
-macro_rules! named {
-    ($($t:ty),*) => {$(
-        impl Named for $t {
-            fn name(&self) -> &str {
-                &self.name
-            }
-            fn name_mut(&mut self) -> &mut String {
-                &mut self.name
-            }
-        }
-    )*};
-}
-named!(Preset, TuningPreset, AppearancePreset);
-
-/// Move the tuning out of older Visuals presets into Tuning presets of the same
-/// name, so nothing saved is lost. Identical tunings are only kept once.
-pub fn migrate_presets(stored: &mut Stored) {
-    for p in &mut stored.presets {
-        let Some(tuning) = p.tuning.take() else {
-            continue;
-        };
-        let tuning = tuning.clamped();
-        if !stored.tuning_presets.iter().any(|t| t.tuning == tuning) {
-            stored.tuning_presets.push(TuningPreset {
-                name: p.name.clone(),
-                tuning,
-            });
+            updates: UpdateSettings::default(),
+            monitor: MonitorSettings::default(),
+            favorites: Vec::new(),
         }
     }
 }
@@ -968,28 +1065,12 @@ fn legacy_config_path() -> Option<PathBuf> {
     dirs::config_dir().map(|d| d.join("muvijo").join("settings.json"))
 }
 
-/// Bring settings read from a file of any older version up to date, and every
-/// value back into range.
+/// Bring settings read from a file up to date: the current version, and every
+/// value back into range. (Older formats are changed before they're read; see
+/// [`upgrade`].)
 pub fn migrate(mut s: Stored) -> Stored {
-    // 0 → 1: Visuals presets used to carry tuning; field renames (smoothing →
-    // spread, stereo → split) are handled by serde aliases.
-    if s.version < 1 {
-        migrate_presets(&mut s);
-    }
     s.version = CONFIG_VERSION;
-
-    s.tuning = s.tuning.clamped();
-    s.visuals = s.visuals.clamped();
-    s.appearance = s.appearance.clamped();
-    for p in &mut s.presets {
-        p.visuals = p.visuals.clone().clamped();
-    }
-    for p in &mut s.tuning_presets {
-        p.tuning = p.tuning.clone().clamped();
-    }
-    for p in &mut s.appearance_presets {
-        p.appearance = p.appearance.clone().clamped();
-    }
+    s.sections = s.sections.clamped();
     s
 }
 
@@ -1026,7 +1107,11 @@ pub fn load() -> Stored {
     else {
         return Stored::default();
     };
-    match serde_json::from_str::<Stored>(&text) {
+    let parsed = serde_json::from_str::<serde_json::Value>(&text).and_then(|mut json| {
+        upgrade(&mut json);
+        serde_json::from_value::<Stored>(json)
+    });
+    match parsed {
         Ok(s) => {
             if s.version > CONFIG_VERSION {
                 // Written by a newer Undavi: use what we understand, but keep the

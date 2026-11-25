@@ -2,13 +2,13 @@
 # Install a built Undavi into a prefix (default /usr/local). Used by the PKGBUILDs
 # and the release tarball; also works on its own:
 #
-#   cargo build --release && sudo packaging/install.sh
-#   sudo packaging/install.sh --uninstall      # remove what it installed
+#   cargo build --release && sudo ./install.sh
+#   sudo ./install.sh --uninstall      # remove what it installed
 #
 # Set DESTDIR to stage the files somewhere else (packaging), PREFIX to change
 # /usr/local. Use the same PREFIX to uninstall.
 set -eu
-root=$(cd "$(dirname "$0")/.." && pwd)
+root=$(cd "$(dirname "$0")" && pwd)
 prefix=${PREFIX:-/usr/local}
 dest=${DESTDIR:-}
 target="$dest$prefix"
@@ -40,11 +40,14 @@ for dir in "$root"/assets/icons/linux/hicolor/*/apps; do
         install -Dm644 "$file" "$target/share/icons/hicolor/$size/apps/$(basename "$file")"
     done
 done
-# Undavi's license, the bundled font's license, and the notices of the Rust crates
-# compiled into the binary, which their licenses ask to travel with it.
+# Undavi's license, the bundled font's and icons' licenses, and the notices of the
+# Rust crates compiled into the binary, which their licenses ask to travel with it.
 for file in "$root"/LICENSE "$root"/NOTICE "$root"/assets/fonts/OFL-Inter.txt \
     "$root"/packaging/THIRD-PARTY-LICENSES.txt; do
     if [ -s "$file" ]; then
         install -Dm644 "$file" "$target/share/licenses/undavi/$(basename "$file")"
     fi
 done
+# Under another name: it's also called LICENSE.
+install -Dm644 "$root/assets/icons/ui/LICENSE" \
+    "$target/share/licenses/undavi/Apache-Material-Symbols.txt"

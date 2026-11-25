@@ -26,7 +26,15 @@
     </ul>
   </description>
   <releases>
-    <release version="0.9.0" date="2026-11-18">
+    <release version="0.10.0" date="2026-11-25">
+      <description>
+        <p>
+          One settings window with a live preview, search and presets for every
+          section, custom visualizer and background shaders, and update checks.
+        </p>
+      </description>
+    </release>
+    <release version="0.9.0" date="2026-11-19">
       <description>
         <p>The first public release.</p>
       </description>

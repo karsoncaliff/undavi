@@ -1,6 +1,7 @@
 # Packaging
 
-Everything for distribution lives in `packaging/`. The app ID is `undavi`
+Everything for distribution lives in `packaging/`, with `install.sh` at the root of the
+repository. The app ID is `undavi`
 everywhere: the Wayland `app_id`, the `.desktop` file and the icon names must
 match, or compositors and docks show a generic icon.
 
@@ -13,6 +14,7 @@ match, or compositors and docks show a generic icon.
 | `packaging/linux/undavi.metainfo.xml` | `share/metainfo/undavi.metainfo.xml` |
 | `assets/icons/linux/hicolor/<size>/apps/undavi.*` | `share/icons/hicolor/<size>/apps/` |
 | `LICENSE`, `NOTICE`, `assets/fonts/OFL-Inter.txt`, `packaging/THIRD-PARTY-LICENSES.txt` | `share/licenses/undavi/` |
+| `assets/icons/ui/LICENSE` | `share/licenses/undavi/Apache-Material-Symbols.txt` |
 
 Fonts, the wordmark and the in-app icon are compiled into the binary, so nothing
 else needs installing.
@@ -21,9 +23,9 @@ else needs installing.
 
 ```sh
 cargo build --release --locked
-sudo packaging/install.sh                       # into /usr/local
-sudo packaging/install.sh --uninstall           # remove it again
-PREFIX=/usr DESTDIR="$pkgdir" packaging/install.sh  # staged, for a package
+sudo ./install.sh                       # into /usr/local
+sudo ./install.sh --uninstall           # remove it again
+PREFIX=/usr DESTDIR="$pkgdir" ./install.sh  # staged, for a package
 ```
 
 The release tarball has the same layout, so the same commands work in it.
@@ -44,6 +46,35 @@ Runtime dependencies: `alsa-lib`, `dbus`, `gcc-libs`, `glibc`, `libpipewire`,
 `libxkbcommon`, `wayland`, `vulkan-icd-loader`, plus the X11 libraries
 (`libx11`, `libxcursor`, `libxrandr`, `libxi`) for X11 sessions. Building needs
 `cargo` and `clang` (the PipeWire bindings are generated with bindgen).
+
+## Updates
+
+On x86-64 Linux, Undavi asks GitHub for the latest published release when it
+starts (`src/update.rs`; drafts and pre-releases are skipped). What it does with a
+newer one depends on how it was installed:
+
+| Installed with | The pop-up |
+|---|---|
+| pacman (`pacman -Qo` owns the binary) | Says to update with the package manager. |
+| `install.sh` or the release tarball (`<prefix>/bin/undavi`) | Offers to install it. |
+| Neither (run from `target/`, or `cargo install`) | Never checks. |
+
+Installing downloads `undavi-<version>-x86_64-linux.tar.gz` and its `.sha256`
+from the repository's own releases, over HTTPS only, to `~/.cache/undavi/update`
+(removed afterwards), and checks the hash. It then copies the tarball to a private
+temporary folder, checks that copy, unpacks it there and runs its install script
+(`install.sh` at its root, or `packaging/install.sh`) with `PREFIX` set to the
+current install's prefix. When that prefix isn't writable, all of that second part
+runs through `pkexec`, which asks for the user's password. So nothing runs as root
+from a folder other programs of the user could change. The new version starts with
+the next launch; the pop-up offers a restart.
+
+The hash comes from the same release as the tarball: it catches a broken or altered
+download, not a release published by someone else. Releases aren't signed.
+
+So releases must keep the tarball's name and its checksum file, and a working
+install script inside it, or updating fails with a message and a link to the
+release page.
 
 ## Other formats
 

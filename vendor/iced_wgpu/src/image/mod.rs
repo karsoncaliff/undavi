@@ -340,9 +340,13 @@ impl State {
                             _ => {}
                         }
 
+                        // Undavi patch: exactly the pixels it was rasterized at.
+                        let (bounds, clip_bounds) =
+                            on_pixels(*bounds, *clip_bounds, scale);
+
                         add_instances(
-                            *bounds,
-                            *clip_bounds,
+                            bounds,
+                            clip_bounds,
                             border::radius(0),
                             f32::from(svg.rotation),
                             svg.opacity,
@@ -642,6 +646,32 @@ struct Uniforms {
     // Uniforms must be aligned to their largest member,
     // this uses a mat4x4<f32> which aligns to 16, so align to that
     _padding: [f32; 3],
+}
+
+/// Undavi patch: where to draw an SVG so that each of its rasterized pixels covers
+/// one pixel of the screen. Its size was rounded up to rasterize it, and rounding
+/// both of its edges to the screen's pixels can come out one pixel wider or
+/// narrower than that, which repeated or dropped a row or column.
+fn on_pixels(
+    bounds: Rectangle,
+    clip_bounds: Rectangle,
+    scale: f32,
+) -> (Rectangle, Rectangle) {
+    let snapped = Rectangle {
+        x: (bounds.x * scale).round_ties_even() / scale,
+        y: (bounds.y * scale).round_ties_even() / scale,
+        width: (bounds.width * scale).ceil() / scale,
+        height: (bounds.height * scale).ceil() / scale,
+    };
+
+    // Only clipped to its own bounds: those moved.
+    let clip_bounds = if bounds.is_within(&clip_bounds) {
+        snapped
+    } else {
+        clip_bounds
+    };
+
+    (snapped, clip_bounds)
 }
 
 fn add_instances(

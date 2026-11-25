@@ -1,7 +1,7 @@
 # Builds Undavi from this checkout:  cd packaging/arch && makepkg -si
 # The AUR package, which builds a tagged release, is packaging/aur/PKGBUILD.
 pkgname=undavi
-pkgver=0.9.0
+pkgver=0.10.0
 pkgrel=1
 pkgdesc='Audio visualizer'
 arch=('x86_64' 'aarch64')
@@ -22,5 +22,5 @@ build() {
 
 package() {
     cd "$_root"
-    DESTDIR="$pkgdir" PREFIX=/usr ./packaging/install.sh
+    DESTDIR="$pkgdir" PREFIX=/usr ./install.sh
 }

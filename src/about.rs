@@ -87,6 +87,27 @@ const APP_LICENSE: &str = concat!(
     "\n\n",
     include_str!("../LICENSE")
 );
+/// The license of the simplex noise in `assets/shaders/scene.wgsl`.
+const WEBGL_NOISE_LICENSE: &str = "Copyright (C) 2011 Ashima Arts, (C) 2011-2016 Stefan Gustavson
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the \"Software\"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software is furnished to do so,
+subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+";
+
 /// Where the source code is (the GPL's offer of source), from Cargo.toml.
 const REPOSITORY: &str = env!("CARGO_PKG_REPOSITORY");
 
@@ -99,12 +120,27 @@ pub fn licenses() -> Vec<License> {
         text: APP_LICENSE,
         link: (!REPOSITORY.is_empty()).then_some(("Source code", REPOSITORY)),
     }];
-    out.extend([License {
-        name: "Inter",
-        summary: "SIL Open Font License 1.1 \u{00B7} \u{00A9} 2016 The Inter Project Authors",
-        text: include_str!("../assets/fonts/OFL-Inter.txt"),
-        link: Some(("rsms.me/inter", "https://rsms.me/inter/")),
-    }]);
+    out.extend([
+        License {
+            name: "Inter",
+            summary: "SIL Open Font License 1.1 \u{00B7} \u{00A9} 2016 The Inter Project Authors",
+            text: include_str!("../assets/fonts/OFL-Inter.txt"),
+            link: Some(("rsms.me/inter", "https://rsms.me/inter/")),
+        },
+        License {
+            name: "Material Symbols",
+            summary: "Apache License 2.0 \u{00B7} From Google. The icons throughout Undavi.",
+            text: include_str!("../assets/icons/ui/LICENSE"),
+            link: Some(("fonts.google.com", "https://fonts.google.com/icons")),
+        },
+        License {
+            name: "webgl-noise",
+            summary: "MIT License \u{00B7} \u{00A9} 2011 Ashima Arts, \u{00A9} 2011\u{2013}2016 Stefan Gustavson. \
+                      The simplex noise behind the Liquid background.",
+            text: WEBGL_NOISE_LICENSE,
+            link: Some(("github.com/stegu/webgl-noise", "https://github.com/stegu/webgl-noise")),
+        },
+    ]);
     out
 }
 

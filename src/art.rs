@@ -1,31 +1,23 @@
-//! Album art: fetching, decoding, pre-blurring and color extraction.
+//! Album art: fetching, decoding and color extraction. (The background's blur,
+//! grading and effects run on the GPU; see `backdrop.rs`.)
 //!
 //! All heavy work runs on a worker thread. The UI polls [`ArtLoader::snapshot`] each frame.
 
+use crate::backdrop::Cover;
 use ::image::{RgbImage, imageops};
 use iced::widget::image::Handle;
+use std::io::Read;
+use std::path::Path;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-/// On-screen size of the largest background copy we pre-blur for, in logical px.
-/// (88% of a container 1.5× a ~1440px window.)
-const REFERENCE_COPY_PX: f32 = 1900.0;
-/// Background art saturation boost.
-const ART_SATURATION: f32 = 1.35;
-/// Ambient: fixed blur and saturation.
-const AMBIENT_BLUR_PX: f32 = 90.0;
-const AMBIENT_SATURATION: f32 = 1.3;
-const AMBIENT_TEXTURE: u32 = 128;
 const MAX_DOWNLOAD: u64 = 10 * 1024 * 1024;
-
-/// The four ambient circles: center (x, y), diameter, all as fractions of the container.
-const AMBIENT_CIRCLES: [(f32, f32, f32); 4] = [
-    (0.32, 0.36, 0.52),
-    (0.70, 0.30, 0.46),
-    (0.62, 0.72, 0.44),
-    (0.28, 0.72, 0.40),
-];
+/// Covers on disk can be bigger, but players can point anywhere.
+const MAX_FILE: u64 = 64 * 1024 * 1024;
+/// The widest or tallest picture decoded, and the most memory for it.
+const MAX_SIDE: u32 = 10_000;
+const MAX_DECODED: u64 = 320 * 1024 * 1024;
 /// Mockup colors; also used when there's no cover to take colors from.
 pub const DEFAULT_AMBIENT: [[u8; 3]; 4] = [
     [0x3B, 0x3F, 0x92],
@@ -42,39 +34,25 @@ pub struct Art {
     pub thumb: Handle,
     /// 96px round cover for the accent swatch (canvas images can't be clipped to a circle).
     pub swatch: Handle,
-    /// 384px round cover for the center of the Radial style.
-    pub disc: Handle,
     /// Suggested accent, if the cover has a suitable color.
     pub accent: Option<[u8; 3]>,
     /// Bar colors for the Album palette, dark to light.
     pub gradient: [[u8; 3]; 3],
-    /// Ambient-mode texture built from the cover's colors.
-    pub ambient: Handle,
-}
-
-/// The cover blurred and saturated for the Album art background.
-pub struct Blurred {
-    pub url: String,
-    pub blur_px: u8,
-    pub handle: Handle,
+    /// Colors for the Ambient background, taken from the cover.
+    pub ambient_colors: [[u8; 3]; 4],
+    /// The 512px cover for the GPU background.
+    pub backdrop: Cover,
 }
 
 #[derive(Default)]
 struct Shared {
     art: Option<Arc<Art>>,
-    blurred: Option<Arc<Blurred>>,
-}
-
-enum Request {
-    Load(Option<String>),
-    Blur(u8),
 }
 
 pub struct ArtLoader {
     shared: Arc<Mutex<Shared>>,
-    requests: Sender<Request>,
+    requests: Sender<Option<String>>,
     url: Option<String>,
-    blur_px: Option<u8>,
 }
 
 impl ArtLoader {
@@ -89,100 +67,55 @@ impl ArtLoader {
             shared,
             requests: tx,
             url: None,
-            blur_px: None,
         }
     }
 
-    /// Ask for the art at `url` (or none). Cheap to call every frame; only changes are sent.
-    pub fn want(&mut self, url: Option<&str>, blur_px: u8) {
+    /// Ask for the art at `url` (or none). Cheap to call every frame; only
+    /// changes are sent.
+    pub fn want(&mut self, url: Option<&str>) {
         if self.url.as_deref() != url {
             self.url = url.map(str::to_string);
-            let _ = self.requests.send(Request::Load(self.url.clone()));
-        }
-        if self.blur_px != Some(blur_px) {
-            self.blur_px = Some(blur_px);
-            let _ = self.requests.send(Request::Blur(blur_px));
+            let _ = self.requests.send(self.url.clone());
         }
     }
 
-    pub fn snapshot(&self) -> (Option<Arc<Art>>, Option<Arc<Blurred>>) {
-        match self.shared.lock() {
-            Ok(s) => (s.art.clone(), s.blurred.clone()),
-            Err(_) => (None, None),
-        }
+    /// Load the current art again.
+    pub fn reload(&self) {
+        let _ = self.requests.send(self.url.clone());
+    }
+
+    pub fn snapshot(&self) -> Option<Arc<Art>> {
+        self.shared.lock().ok().and_then(|s| s.art.clone())
     }
 }
 
-fn worker(rx: Receiver<Request>, shared: Arc<Mutex<Shared>>) {
+fn worker(rx: Receiver<Option<String>>, shared: Arc<Mutex<Shared>>) {
     let agent: ureq::Agent = ureq::Agent::config_builder()
         .timeout_global(Some(Duration::from_secs(10)))
         .user_agent(crate::about::user_agent())
         .build()
         .into();
-    let mut source: Option<(String, RgbImage)> = None;
-    let mut blur_px = 80u8;
-
     while let Ok(first) = rx.recv() {
-        // Coalesce bursts: only the latest load and blur matter.
-        let mut load = None;
-        let mut new_blur = None;
-        for req in std::iter::once(first).chain(rx.try_iter()) {
-            match req {
-                Request::Load(url) => load = Some(url),
-                Request::Blur(px) => new_blur = Some(px),
-            }
-        }
-        if let Some(px) = new_blur {
-            blur_px = px;
-        }
-
-        if let Some(url) = load {
-            source = None;
-            let art = url
-                .as_ref()
-                .and_then(|url| match fetch(&agent, url).and_then(decode) {
-                    Ok(img) => {
-                        let art = Art::from_image(&img);
-                        source = Some((url.clone(), img));
-                        Some(Arc::new(art))
-                    }
-                    Err(e) => {
-                        eprintln!("undavi: album art unavailable ({url}): {e}");
-                        None
-                    }
-                });
-            if let Ok(mut s) = shared.lock() {
-                s.art = art;
-                s.blurred = None;
-            }
-        }
-
-        if let Some((url, img)) = &source {
-            let stale = shared
-                .lock()
-                .map(|s| {
-                    s.blurred
-                        .as_ref()
-                        .is_none_or(|b| b.url != *url || b.blur_px != blur_px)
-                })
-                .unwrap_or(false);
-            if stale {
-                let handle = blur_cover(img, blur_px);
-                if let Ok(mut s) = shared.lock() {
-                    s.blurred = Some(Arc::new(Blurred {
-                        url: url.clone(),
-                        blur_px,
-                        handle,
-                    }));
+        // Skipping through tracks: only the latest one matters.
+        let url = rx.try_iter().last().unwrap_or(first);
+        let art = url
+            .as_ref()
+            .and_then(|url| match fetch(&agent, url).and_then(decode) {
+                Ok(img) => Some(Arc::new(Art::from_image(&img))),
+                Err(e) => {
+                    eprintln!("undavi: album art unavailable ({url}): {e}");
+                    None
                 }
-            }
+            });
+        if let Ok(mut s) = shared.lock() {
+            s.art = art;
         }
     }
 }
 
 fn fetch(agent: &ureq::Agent, url: &str) -> Result<Vec<u8>, String> {
     if let Some(path) = url.strip_prefix("file://") {
-        return std::fs::read(percent_decode(path)).map_err(|e| e.to_string());
+        return read_file(Path::new(&percent_decode(path)), MAX_FILE);
     }
     if url.starts_with("http://") || url.starts_with("https://") {
         let mut resp = agent.get(url).call().map_err(|e| e.to_string())?;
@@ -196,8 +129,34 @@ fn fetch(agent: &ureq::Agent, url: &str) -> Result<Vec<u8>, String> {
     Err("unsupported URL scheme".into())
 }
 
+/// Read a regular file of at most `max` bytes. (Not a device or a pipe, which could
+/// go on forever.)
+pub(crate) fn read_file(path: &Path, max: u64) -> Result<Vec<u8>, String> {
+    let meta = std::fs::metadata(path).map_err(|e| e.to_string())?;
+    if !meta.is_file() {
+        return Err("not a file".into());
+    }
+    let mut bytes = Vec::new();
+    std::fs::File::open(path)
+        .and_then(|f| f.take(max + 1).read_to_end(&mut bytes))
+        .map_err(|e| e.to_string())?;
+    if bytes.len() as u64 > max {
+        return Err("the file is too big".into());
+    }
+    Ok(bytes)
+}
+
 fn decode(bytes: Vec<u8>) -> Result<RgbImage, String> {
-    ::image::load_from_memory(&bytes)
+    let mut reader = ::image::ImageReader::new(std::io::Cursor::new(bytes))
+        .with_guessed_format()
+        .map_err(|e| e.to_string())?;
+    let mut limits = ::image::Limits::default();
+    limits.max_image_width = Some(MAX_SIDE);
+    limits.max_image_height = Some(MAX_SIDE);
+    limits.max_alloc = Some(MAX_DECODED);
+    reader.limits(limits);
+    reader
+        .decode()
         .map(|i| i.to_rgb8())
         .map_err(|e| e.to_string())
 }
@@ -233,15 +192,15 @@ impl Art {
         let gradient = album_gradient(&colors, picked);
         let ambient_colors = ambient_palette(&colors);
         let swatch = imageops::resize(&square, 96, 96, imageops::FilterType::Triangle);
-        let disc = imageops::resize(&square, 384, 384, imageops::FilterType::Triangle);
+        let backdrop = Cover::new(::image::DynamicImage::ImageRgb8(cover.clone()).to_rgba8());
         Self {
-            disc: round_handle(&disc),
             swatch: round_handle(&swatch),
             cover: to_handle(&cover),
+            backdrop,
             thumb: to_handle(&thumb),
             accent,
             gradient,
-            ambient: ambient_texture(&ambient_colors),
+            ambient_colors,
         }
     }
 }
@@ -270,41 +229,6 @@ fn round_handle(img: &RgbImage) -> Handle {
         })
         .collect();
     Handle::from_rgba(img.width(), img.height(), rgba)
-}
-
-fn saturate(img: &mut RgbImage, amount: f32) {
-    for p in img.pixels_mut() {
-        let [r, g, b] = p.0.map(|c| c as f32);
-        let gray = 0.299 * r + 0.587 * g + 0.114 * b;
-        p.0 = [r, g, b].map(|c| (gray + (c - gray) * amount).round().clamp(0.0, 255.0) as u8);
-    }
-}
-
-/// Blur once per track: shrink, gaussian-blur, saturate. Drawn later stretched with linear filtering.
-pub fn blur_cover(img: &RgbImage, blur_px: u8) -> Handle {
-    let square = center_square(img);
-    // Pick a working size where the blur spans a couple of src pixels.
-    let size = ((REFERENCE_COPY_PX * 2.0 / (blur_px.max(1) as f32)).round() as u32).clamp(64, 512);
-    let mut small = imageops::resize(&square, size, size, imageops::FilterType::Triangle);
-    let sigma = blur_px as f32 * size as f32 / REFERENCE_COPY_PX;
-    if sigma >= 0.3 {
-        small = imageops::blur(&small, sigma);
-    }
-    saturate(&mut small, ART_SATURATION);
-    // Feather into a soft disc so overlapping copies blend (CSS blurs the composited
-    // container; we blur each copy, so the edges need softening here).
-    let half = size as f32 / 2.0;
-    let rgba: Vec<u8> = small
-        .enumerate_pixels()
-        .flat_map(|(x, y, p)| {
-            let d =
-                ((x as f32 + 0.5 - half).powi(2) + (y as f32 + 0.5 - half).powi(2)).sqrt() / half;
-            let t = ((d - 0.6) / 0.4).clamp(0.0, 1.0);
-            let alpha = 1.0 - t * t * (3.0 - 2.0 * t);
-            [p[0], p[1], p[2], (alpha * 255.0).round() as u8]
-        })
-        .collect();
-    Handle::from_rgba(size, size, rgba)
 }
 
 // ---------------------------------------------------------------------------
@@ -536,34 +460,40 @@ fn ambient_palette(colors: &[([u8; 3], usize)]) -> [[u8; 3]; 4] {
     out
 }
 
-/// Soft circles on a square texture standing in for the (square) ambient container.
-pub fn ambient_texture(colors: &[[u8; 3]; 4]) -> Handle {
-    let n = AMBIENT_TEXTURE;
-    let base = [0x14u8, 0x14, 0x16];
-    let mut img = RgbImage::from_pixel(n, n, ::image::Rgb(base));
-    for ((cx, cy, d), color) in AMBIENT_CIRCLES.iter().zip(colors) {
-        let (cx, cy, r) = (cx * n as f32, cy * n as f32, d * n as f32 / 2.0);
-        for (x, y, p) in img.enumerate_pixels_mut() {
-            let dist = ((x as f32 + 0.5 - cx).powi(2) + (y as f32 + 0.5 - cy).powi(2)).sqrt();
-            // Slightly soft edge before the big blur.
-            let a = ((r - dist) / 2.0 + 0.5).clamp(0.0, 1.0);
-            if a > 0.0 {
-                for c in 0..3 {
-                    p.0[c] = (p.0[c] as f32 * (1.0 - a) + color[c] as f32 * a).round() as u8;
-                }
-            }
-        }
-    }
-    // Container ≈ 2400px on screen for a 1440×900 window.
-    let sigma = AMBIENT_BLUR_PX * n as f32 / 2400.0;
-    let mut img = imageops::blur(&img, sigma);
-    saturate(&mut img, AMBIENT_SATURATION);
-    to_handle(&img)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_regular_files_of_a_sane_size_are_read() {
+        let dir = std::env::temp_dir().join(format!("undavi art {}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("cover.png");
+        std::fs::write(&file, [7; 100]).unwrap();
+        assert_eq!(read_file(&file, 100), Ok(vec![7; 100]));
+        assert!(read_file(&file, 99).is_err());
+        assert!(read_file(&dir, 100).is_err());
+        assert!(read_file(&dir.join("missing"), 100).is_err());
+        // Would never end.
+        #[cfg(target_os = "linux")]
+        assert!(read_file(Path::new("/dev/zero"), 100).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn huge_pictures_are_not_decoded() {
+        let png = |w, h| {
+            let mut out = std::io::Cursor::new(Vec::new());
+            RgbImage::new(w, h)
+                .write_to(&mut out, ::image::ImageFormat::Png)
+                .unwrap();
+            out.into_inner()
+        };
+        assert_eq!(decode(png(40, 30)).unwrap().dimensions(), (40, 30));
+        assert!(decode(png(MAX_SIDE, 1)).is_ok());
+        assert!(decode(png(MAX_SIDE + 1, 1)).is_err());
+        assert!(decode(b"not a picture".to_vec()).is_err());
+    }
 
     fn two_tone(a: [u8; 3], b: [u8; 3]) -> RgbImage {
         RgbImage::from_fn(64, 64, |x, _| ::image::Rgb(if x < 40 { a } else { b }))

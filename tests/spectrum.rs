@@ -128,6 +128,29 @@ fn gravity_falls_slow_then_fast() {
 }
 
 #[test]
+fn stronger_gravity_drops_sooner() {
+    let loud = flat_frame(-4.0);
+    let frame = [frame_with(&loud)];
+    let landing_frames = |strength: u8| {
+        let tuning = TuningSettings {
+            gravity: true,
+            gravity_strength: strength,
+            ..flat_tuning()
+        };
+        let mut p = Processor::default();
+        run(&mut p, &frame, &tuning, 60);
+        (1..600)
+            .find(|_| {
+                p.update(&[], 8, &tuning, 1.0 / 60.0);
+                p.visible()[0] == 0.0
+            })
+            .expect("lands")
+    };
+    let (weak, normal, strong) = (landing_frames(50), landing_frames(100), landing_frames(200));
+    assert!(weak > normal && normal > strong, "{weak} {normal} {strong}");
+}
+
+#[test]
 fn auto_gain_holds_through_silence() {
     let quiet = flat_frame(-60.0);
     let frame = [frame_with(&quiet)];

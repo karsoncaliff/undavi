@@ -45,11 +45,11 @@ from an app issue: `WGPU_BACKEND=gl cargo run --release`.
 ```text
 src/
   lib.rs, main.rs     the library and the binary (main just calls undavi::run)
-  audio.rs …          the public engine: audio, spectrum, settings, lyrics, media
-  app.rs, view.rs …   the app: state, update loop, widgets, drawing
+  audio/ …            the public engine: audio, spectrum, settings, lyrics, media
+  app/, view/ …       the app: state, update loop, widgets, drawing
 tests/                integration tests of the public API
 docs/                 how things work (start with docs/architecture.md)
-assets/               fonts, icons, the wordmark
+assets/               fonts, icons, shaders, the wordmark
 packaging/            install script, PKGBUILD, desktop file, metainfo
 vendor/iced_wgpu/     a patched iced renderer (see its PATCHED.md)
 dev/                  the project's to-do list and reference images
@@ -65,7 +65,7 @@ cargo test
 ```
 
 - **Unit tests** sit next to the code (`#[cfg(test)] mod tests`) and may use
-  private items. App behavior (focus, panels, presets, idle mode) is tested this
+  private items. App behavior (focus, settings, presets, idle mode) is tested this
   way, by driving `App::update` and `App::view`.
 - **Integration tests** in `tests/` use only the public API, like any other user
   of the library. Prefer them for anything in `audio`, `spectrum`, `settings`,
