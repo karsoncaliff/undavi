@@ -23,7 +23,7 @@ The following features are planned for a specific future release version, a gene
 
 ### v1.0.0
 
-- [ ] Windows support.
+- [x] Windows support.
 - [ ] File support.
 
 ### General

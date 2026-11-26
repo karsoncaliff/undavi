@@ -4,7 +4,7 @@ All notable changes to Undavi are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.0.0-alpha.2] - 2026-11-26
 
 ### Fixed
 
@@ -185,7 +185,7 @@ The first public release.
 - Settings saved in a versioned file, with automatic migration from older
   versions and from Muvijo, Undavi's previous name.
 
-[Unreleased]: https://github.com/karsoncaliff/undavi/compare/v1.0.0-alpha...HEAD
+[1.0.0-alpha.2]: https://github.com/karsoncaliff/undavi/compare/v1.0.0-alpha...v1.0.0-alpha.2
 [1.0.0-alpha]: https://github.com/karsoncaliff/undavi/compare/v0.10.0...v1.0.0-alpha
 [0.10.0]: https://github.com/karsoncaliff/undavi/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/karsoncaliff/undavi/releases/tag/v0.9.0

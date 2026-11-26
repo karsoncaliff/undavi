@@ -1,9 +1,9 @@
 [package]
 name = "undavi"
-version = "1.0.0-alpha"
+version = "1.0.0-alpha.2"
 edition = "2024"
 rust-version = "1.90"
-description = "A sound visualizer for your desktop, with media art, playback controls and synced lyrics"
+description = "An audio visualizer for your desktop, with media art, playback controls and synced lyrics"
 repository = "https://github.com/karsoncaliff/undavi"
 license = "GPL-3.0-only"
 readme = "README.md"
