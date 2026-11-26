@@ -317,8 +317,8 @@ The full roadmap for future features can be found [here](ROADMAP.md).
 - **"Always on top" is missing.** Wayland doesn't let apps keep themselves on
   top; use your compositor's window rules instead.
 - **Rendering problems or a blank window.** Try another graphics backend. On Linux,
-  OpenGL: `WGPU_BACKEND=gl undavi`. On Windows, set `WGPU_BACKEND` to `dx12` or
-  `vulkan` first (in PowerShell, `$env:WGPU_BACKEND = 'dx12'`).
+  OpenGL: `WGPU_BACKEND=gl undavi`. On Windows, where Undavi uses DirectX 12, Vulkan: in
+  PowerShell, `$env:WGPU_BACKEND = 'vulkan'` before starting it.
 
 ## Contributing
 

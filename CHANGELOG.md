@@ -6,6 +6,12 @@ All notable changes to Undavi are listed here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Windows: going full screen could show the desktop through Undavi, or a white patch,
+  for a few seconds (seen with NVIDIA). Undavi now draws with DirectX 12 on Windows,
+  where the GPU has it. `WGPU_BACKEND` still picks another one.
+
 ## [1.0.0-alpha] - 2026-11-25
 
 An unstable version, for trying the latest features.

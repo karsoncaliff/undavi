@@ -108,6 +108,7 @@ See [Audio pipeline](audio-pipeline.md) for steps 2 to 4 in detail.
 | `.lrc` files next to the song | Yes | No: players don't say which file it is | Not yet |
 | Always on top | X11 only (Wayland has no way to ask) | Yes | Yes |
 | Reduced motion | The desktop portal | "Animation effects" in the accessibility settings | Not yet |
+| Graphics | Vulkan, or OpenGL | DirectX 12 where the GPU has it (Vulkan made full screen glitch on NVIDIA), or else Vulkan or OpenGL | Metal |
 | Updates | Release tarball, `install.sh` | Release zip, `install.ps1` | Not yet |
 
 `platform::Platform` records what's available, and the view leaves out controls

@@ -44,7 +44,8 @@ cargo run --release    # what users get; much smoother
 ```
 
 If colors or rendering look wrong, try another graphics backend to tell a driver issue
-from an app issue: set `WGPU_BACKEND` to `gl` (or on Windows, `dx12` or `vulkan`).
+from an app issue: set `WGPU_BACKEND` to `gl` (or on Windows, where Undavi uses DirectX
+12 unless told otherwise, `vulkan`).
 
 ## Where things are
 

@@ -75,12 +75,40 @@ pub fn attach_console() {
     let _ = unsafe { AttachConsole(ATTACH_PARENT_PROCESS) };
 }
 
+/// Draw with DirectX 12 on Windows, where the GPU has it, unless `WGPU_BACKEND` says
+/// otherwise. wgpu would pick Vulkan first, and with NVIDIA's Vulkan the desktop could
+/// show through the window, or a white patch cover it, for a few seconds when it went
+/// full screen.
+#[cfg(windows)]
+fn prefer_direct3d() {
+    use iced::wgpu;
+
+    if std::env::var_os("WGPU_BACKEND").is_some() {
+        return;
+    }
+    let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
+        backends: wgpu::Backends::DX12,
+        ..Default::default()
+    });
+    // (Windows always has a DirectX 12 that runs on the processor.)
+    let has_gpu = instance
+        .enumerate_adapters(wgpu::Backends::DX12)
+        .iter()
+        .any(|a| a.get_info().device_type != wgpu::DeviceType::Cpu);
+    if has_gpu {
+        // SAFETY: changing the environment is always safe on Windows (see `set_var`).
+        unsafe { std::env::set_var("WGPU_BACKEND", "dx12") };
+    }
+}
+
 /// Open the Undavi window and run until it's closed.
 ///
 /// # Errors
 ///
 /// Fails if no window or graphics device could be created.
 pub fn run() -> iced::Result {
+    #[cfg(windows)]
+    prefer_direct3d();
     let mut app = iced::application(app::App::new, app::App::update, app::App::view)
         .title(app::App::title)
         .subscription(app::App::subscription)
